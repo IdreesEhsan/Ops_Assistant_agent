@@ -71,6 +71,8 @@ export default function ChatView() {
     setInput('');
     setIsGenerating(true);
 
+    const isNewSession = !currentSessionId;   // capture before sending
+
     const assistantIndex = newMessages.length;
     setMessages(prev => [...prev, { role: 'assistant', content: '' }]);
 
@@ -102,6 +104,10 @@ export default function ChatView() {
     } finally {
       setIsGenerating(false);
       loadSessions();
+      // Refresh again after a few seconds to pick up the AI-generated title
+      if (isNewSession) {
+        setTimeout(() => loadSessions(), 5000);
+      }
     }
   };
 
