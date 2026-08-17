@@ -1,7 +1,7 @@
 import React from 'react';
-import { MessageSquare, FileText, ShieldCheck, LogOut } from 'lucide-react';
+import { MessageSquare, FileText, ShieldCheck, LogOut, FolderOpen } from 'lucide-react';
 
-export default function Navbar({ setShowApprovals, onLogout }) {
+export default function Navbar({ setShowApprovals, setShowDocuments, onLogout }) {
   return (
     <header className="ops-navbar">
       <div className="ops-logo">
@@ -13,7 +13,16 @@ export default function Navbar({ setShowApprovals, onLogout }) {
           <button className="ops-tab active">
             <MessageSquare size={16} /> Agent Chat
           </button>
-          <button className="ops-tab" onClick={() => setShowApprovals(prev => !prev)}>
+          <button
+            className="ops-tab"
+            onClick={() => setShowDocuments(prev => !prev)}
+          >
+            <FolderOpen size={16} /> Documents
+          </button>
+          <button
+            className="ops-tab"
+            onClick={() => setShowApprovals(prev => !prev)}
+          >
             <FileText size={16} /> Approval Queue
           </button>
         </nav>
