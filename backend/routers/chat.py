@@ -2,23 +2,29 @@ from fastapi import APIRouter, Depends, HTTPException
 from fastapi.responses import StreamingResponse
 from models.schemas import ChatRequest, CreateSessionRequest
 from services.agent import app
+from services.llm_service import generate_chat_title
 from dependencies import get_current_user
 from services import db_service
 from langchain_core.messages import HumanMessage, AIMessage
 import json
+import asyncio
+import logging
 
 router = APIRouter(prefix="/api/chat", tags=["chat"])
+logger = logging.getLogger("uvicorn")
 
-# ---------- Helper: generate chat title from first user message ----------
-def generate_title_from_message(message: str) -> str:
-    """Create a short title from the first 6 words of the user message."""
-    words = message.strip().split()
-    if not words:
-        return "New Chat"
-    title = " ".join(words[:6])
-    if len(words) > 6:
-        title += "..."
-    return title
+# ---------- Helper: background title update ----------
+async def generate_and_update_title(session_id: str, user_message: str):
+    """Generate a title using the LLM and update the session."""
+    try:
+        title = await generate_chat_title(user_message)
+        if title:
+            db_service.update_session_title(session_id, title)
+    except Exception as e:
+        logger.error(f"Title update failed: {e}")
+        # Fallback: use first 6 words of the message
+        fallback = " ".join(user_message.strip().split()[:6])
+        db_service.update_session_title(session_id, fallback)
 
 # ---------- Session management ----------
 @router.get("/sessions")
@@ -74,10 +80,9 @@ async def chat_endpoint(request: ChatRequest, user=Depends(get_current_user)):
     user_msg = request.messages[-1].content
     db_service.save_message(session_id, role="user", content=user_msg)
 
-    # Update title if this is a new session (session_id was None initially)
+    # If this is a new session, launch background title generation
     if not request.session_id:
-        title = generate_title_from_message(user_msg)
-        db_service.update_session_title(session_id, title)
+        asyncio.create_task(generate_and_update_title(session_id, user_msg))
 
     # Convert chat history to LangChain messages
     lc_messages = []
