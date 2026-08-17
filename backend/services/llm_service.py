@@ -10,7 +10,7 @@ llm = ChatGroq(
     streaming=True
 )
 
-# Separate LLM for title generation
+# Separate LLM for title generation (can be a faster/cheaper model)
 title_llm = ChatGroq(
     api_key=settings.GROQ_API_KEY,
     model=settings.GROQ_TITLE_MODEL,
@@ -19,11 +19,12 @@ title_llm = ChatGroq(
 )
 
 def get_llm():
+    """Return the main LLM instance."""
     return llm
 
 async def generate_chat_title(user_message: str) -> str | None:
     """
-    Generate a concise title using the dedicated title LLM.
+    Generate a concise 3-5 word title for a chat session using the dedicated title LLM.
     Returns cleaned title or None if generation fails.
     """
     messages = [
@@ -32,7 +33,7 @@ async def generate_chat_title(user_message: str) -> str | None:
     ]
     try:
         response = await title_llm.ainvoke(messages)
-        title = response.content.strip().replace('"', '').replace("'", "")
+        title = response.content.strip().replace('"', '').replace("'", "").strip()
         return title if title else None
     except Exception as e:
         print(f"Title generation failed: {e}")
