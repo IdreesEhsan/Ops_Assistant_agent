@@ -1,13 +1,7 @@
 import React from 'react';
 import { MessageSquare, FileText, ShieldCheck, LogOut, FolderOpen } from 'lucide-react';
 
-export default function Navbar({ activeTab, onTabChange, onLogout }) {
-  const tabs = [
-    { id: 'chat', label: 'Agent Chat', icon: <MessageSquare size={16} /> },
-    { id: 'documents', label: 'Documents', icon: <FolderOpen size={16} /> },
-    { id: 'approval', label: 'Approval Queue', icon: <FileText size={16} /> },
-  ];
-
+export default function Navbar({ setShowDocuments, setShowApprovals, onLogout }) {
   return (
     <header className="ops-navbar">
       <div className="ops-logo">
@@ -16,27 +10,23 @@ export default function Navbar({ activeTab, onTabChange, onLogout }) {
       </div>
       <div style={{ display: 'flex', alignItems: 'center', gap: '16px' }}>
         <nav className="ops-tabs">
-          {tabs.map(tab => (
-            <button
-              key={tab.id}
-              className={`ops-tab ${activeTab === tab.id ? 'active' : ''}`}
-              onClick={() => onTabChange(tab.id)}
-              style={{
-                background: activeTab === tab.id ? 'rgba(0,242,254,0.15)' : 'transparent',
-                border: 'none',
-                cursor: 'pointer',
-                padding: '8px 12px',
-                borderRadius: '6px',
-                color: activeTab === tab.id ? '#00f2fe' : 'var(--text-muted)',
-                display: 'inline-flex',
-                alignItems: 'center',
-                gap: '6px',
-                transition: 'all 0.2s',
-              }}
-            >
-              {tab.icon} {tab.label}
-            </button>
-          ))}
+          <button className="ops-tab active" style={{ border: 'none', background: 'transparent', cursor: 'pointer', color: 'var(--text-main)' }}>
+            <MessageSquare size={16} /> Agent Chat
+          </button>
+          <button
+            className="ops-tab"
+            onClick={() => setShowDocuments(prev => !prev)}
+            style={{ border: 'none', background: 'transparent', cursor: 'pointer', color: 'var(--text-muted)' }}
+          >
+            <FolderOpen size={16} /> Documents
+          </button>
+          <button
+            className="ops-tab"
+            onClick={() => setShowApprovals(prev => !prev)}
+            style={{ border: 'none', background: 'transparent', cursor: 'pointer', color: 'var(--text-muted)' }}
+          >
+            <FileText size={16} /> Approval Queue
+          </button>
         </nav>
         <button
           onClick={onLogout}
