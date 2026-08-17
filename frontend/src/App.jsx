@@ -9,9 +9,15 @@ export default function App() {
   const [showApprovals, setShowApprovals] = useState(false);
 
   useEffect(() => {
-    // Check for token on initial load
     if (localStorage.getItem('access_token')) setIsAuthenticated(true);
   }, []);
+
+  // Logout: clear token and set auth to false
+  const handleLogout = () => {
+    localStorage.removeItem('access_token');
+    setIsAuthenticated(false);
+    setShowApprovals(false);
+  };
 
   if (!isAuthenticated) {
     return <AuthView onLoginSuccess={() => setIsAuthenticated(true)} />;
@@ -19,7 +25,7 @@ export default function App() {
 
   return (
     <div className="app-shell">
-      <Navbar setShowApprovals={setShowApprovals} />
+      <Navbar setShowApprovals={setShowApprovals} onLogout={handleLogout} />
       <div className="main-layout">
         <ChatView />
         {showApprovals && <ApprovalQueue />}
