@@ -1,56 +1,28 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState } from 'react';
 import Navbar from './components/Navbar';
 import ChatView from './components/ChatView';
 import AuthView from './components/AuthView';
 import DocumentPanel from './components/DocumentPanel';
 import ApprovalQueue from './components/ApprovalQueue';
 
-function isTokenExpired(token) {
-  try {
-    const base64Url = token.split('.')[1];
-    const base64 = base64Url.replace(/-/g, '+').replace(/_/g, '/');
-    const payload = JSON.parse(decodeURIComponent(atob(base64).split('').map(c => '%' + ('00' + c.charCodeAt(0).toString(16)).slice(-2)).join('')));
-    return payload.exp ? Date.now() >= payload.exp * 1000 : true;
-  } catch {
-    return true;
-  }
-}
-
 function App() {
-  const [isLoggedIn, setIsLoggedIn] = useState(false);
-  const [sessionExpired, setSessionExpired] = useState(false);
+  const [isLoggedIn, setIsLoggedIn] = useState(!!localStorage.getItem('access_token'));
   const [showDocuments, setShowDocuments] = useState(false);
   const [showApprovals, setShowApprovals] = useState(false);
+
+  const handleLogin = () => {
+    setIsLoggedIn(true);
+  };
 
   const handleLogout = () => {
     localStorage.removeItem('access_token');
     setIsLoggedIn(false);
-    setSessionExpired(false);
+    setShowDocuments(false);
+    setShowApprovals(false);
   };
 
-  useEffect(() => {
-    const handler = () => {
-      setSessionExpired(true);
-      setIsLoggedIn(false);
-    };
-    window.addEventListener('auth_expired', handler);
-
-    const token = localStorage.getItem('access_token');
-    if (token && !isTokenExpired(token)) {
-      setIsLoggedIn(true);
-    } else {
-      if (token) {
-        setSessionExpired(true);
-        localStorage.removeItem('access_token');
-      }
-      setIsLoggedIn(false);
-    }
-
-    return () => window.removeEventListener('auth_expired', handler);
-  }, []);
-
   if (!isLoggedIn) {
-    return <AuthView onLoginSuccess={() => { setIsLoggedIn(true); setSessionExpired(false); }} sessionExpired={sessionExpired} />;
+    return <AuthView onLoginSuccess={handleLogin} />;
   }
 
   return (
