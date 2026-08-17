@@ -33,7 +33,7 @@ export default function DocumentPanel() {
 
   return (
     <div style={{ padding: '16px', background: 'var(--bg-secondary)', border: '1px solid var(--panel-border)', borderRadius: '12px' }}>
-      <h3>Documents</h3>
+      <h3 style={{ fontSize: '18px' }}>Documents</h3>
       <label style={{ display: 'inline-block', cursor: 'pointer', marginBottom: '12px', background: 'var(--accent-cyan)', color: '#000', padding: '8px 16px', borderRadius: '6px' }}>
         <Upload size={16} /> Upload PDF/DOCX
         <input type="file" accept=".pdf,.docx" onChange={handleUpload} hidden />
