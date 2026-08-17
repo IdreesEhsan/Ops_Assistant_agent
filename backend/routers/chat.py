@@ -5,7 +5,7 @@ from services.agent import app
 from services.llm_service import generate_chat_title
 from dependencies import get_current_user
 from services import db_service
-from langchain_core.messages import HumanMessage, AIMessage
+from langchain_core.messages import HumanMessage, AIMessage, AIMessageChunk
 import json
 import asyncio
 import logging
@@ -73,7 +73,7 @@ def delete_session(session_id: str, user=Depends(get_current_user)):
 async def chat_endpoint(request: ChatRequest, user=Depends(get_current_user)):
     """
     Process a user message through the LangGraph agent.
-    Returns a streaming response with the final assistant message.
+    Streams the response token by token as it is generated.
     """
     session_id = request.session_id
     if not session_id:
@@ -85,7 +85,7 @@ async def chat_endpoint(request: ChatRequest, user=Depends(get_current_user)):
     user_msg = request.messages[-1].content
     db_service.save_message(session_id, role="user", content=user_msg)
 
-    # If this is a new session, launch background title generation
+    # Launch background title generation for new session
     if not request.session_id:
         asyncio.create_task(generate_and_update_title(session_id, user_msg))
 
@@ -97,19 +97,36 @@ async def chat_endpoint(request: ChatRequest, user=Depends(get_current_user)):
         else:
             lc_messages.append(AIMessage(content=m.content))
 
-    # Run agent with thread_id = session_id for memory
-    config = {"configurable": {"thread_id": session_id}}
-    result = await app.ainvoke(
-        {"messages": lc_messages, "session_id": session_id, "user_id": user.id},
-        config
-    )
-
-    final_message = result["messages"][-1].content
-    db_service.save_message(session_id, role="assistant", content=final_message)
-
-    # Stream the response back
-    async def generate():
+    async def stream_agent_response():
+        full_response = ""
+        # Send session ID first so frontend knows the session
         yield f"data: {json.dumps({'session_id': session_id})}\n\n"
-        yield f"data: {json.dumps({'content': final_message})}\n\n"
+
+        config = {"configurable": {"thread_id": session_id}}
+        try:
+            # Use astream with stream_mode="messages" to get token-level chunks
+            async for message_chunk, metadata in app.astream(
+                {"messages": lc_messages, "session_id": session_id, "user_id": user.id},
+                config,
+                stream_mode="messages"
+            ):
+                # Only process AIMessageChunk with content (skip tool calls, etc.)
+                if isinstance(message_chunk, AIMessageChunk) and message_chunk.content:
+                    content = message_chunk.content
+                    full_response += content
+                    yield f"data: {json.dumps({'content': content})}\n\n"
+        except Exception as e:
+            logger.error(f"Agent streaming error: {e}")
+            yield f"data: {json.dumps({'error': str(e)})}\n\n"
+
+        # Save the final assistant message
+        if full_response:
+            db_service.save_message(session_id, role="assistant", content=full_response)
+        else:
+            full_response = "I couldn't generate a response. Please try again."
+            db_service.save_message(session_id, role="assistant", content=full_response)
+            yield f"data: {json.dumps({'content': full_response})}\n\n"
+
         yield "data: [DONE]\n\n"
-    return StreamingResponse(generate(), media_type="text/event-stream")
+
+    return StreamingResponse(stream_agent_response(), media_type="text/event-stream")
