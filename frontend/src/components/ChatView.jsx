@@ -8,12 +8,11 @@ export default function ChatView() {
   const [sessions, setSessions] = useState([]);
   const [currentSessionId, setCurrentSessionId] = useState(null);
   const [messages, setMessages] = useState([
-    { role: 'assistant', content: 'Hello! I am your Ops Assistant. Ask me about clients, tasks, or documents.' }
+    { role: 'assistant', content: 'Hello! I am your Ops Assistant. Ask me about clients, tasks, or documents.', sources: [] }
   ]);
   const [input, setInput] = useState('');
   const [isGenerating, setIsGenerating] = useState(false);
   const [userEmail, setUserEmail] = useState('');
-  const [sources, setSources] = useState([]);
   const messagesEndRef = useRef(null);
 
   useEffect(() => {
@@ -44,18 +43,16 @@ export default function ChatView() {
 
   const handleSelectSession = async (session) => {
     setCurrentSessionId(session.id);
-    setSources([]);
     try {
       const history = await fetchSessionMessages(session.id);
-      const formatted = history.map(m => ({ role: m.role, content: m.content }));
-      setMessages(formatted.length ? formatted : [{ role: 'assistant', content: 'Conversation loaded.' }]);
+      const formatted = history.map(m => ({ role: m.role, content: m.content, sources: [] }));
+      setMessages(formatted.length ? formatted : [{ role: 'assistant', content: 'Conversation loaded.', sources: [] }]);
     } catch (err) { console.error(err); }
   };
 
   const handleNewChat = () => {
     setCurrentSessionId(null);
-    setMessages([{ role: 'assistant', content: 'Hello! I am your Ops Assistant. Ask me about clients, tasks, or documents.' }]);
-    setSources([]);
+    setMessages([{ role: 'assistant', content: 'Hello! I am your Ops Assistant. Ask me about clients, tasks, or documents.', sources: [] }]);
   };
 
   const handleDeleteSession = async (sessionId) => {
@@ -70,7 +67,7 @@ export default function ChatView() {
 
   const handleSend = async () => {
     if (!input.trim() || isGenerating) return;
-    const userMessage = { role: 'user', content: input };
+    const userMessage = { role: 'user', content: input, sources: [] };
     const newMessages = [...messages, userMessage];
     setMessages(newMessages);
     setInput('');
@@ -78,9 +75,11 @@ export default function ChatView() {
 
     const isNewSession = !currentSessionId;
     const assistantIndex = newMessages.length;
-    setMessages(prev => [...prev, { role: 'assistant', content: '' }]);
+    setMessages(prev => [...prev, { role: 'assistant', content: '', sources: [] }]);
 
     const controller = new AbortController();
+    let receivedSources = [];
+
     try {
       await streamChat(
         newMessages,
@@ -88,7 +87,10 @@ export default function ChatView() {
         (chunk) => {
           setMessages(prev => {
             const updated = [...prev];
-            updated[assistantIndex] = { ...updated[assistantIndex], content: updated[assistantIndex].content + chunk };
+            updated[assistantIndex] = {
+              ...updated[assistantIndex],
+              content: updated[assistantIndex].content + chunk
+            };
             return updated;
           });
         },
@@ -97,16 +99,30 @@ export default function ChatView() {
           if (!currentSessionId) setCurrentSessionId(assignedId);
         },
         controller.signal,
-        (src) => setSources(src)   // <-- receives sources at end
+        (src) => {
+          receivedSources = src;
+        }
       );
     } catch (err) {
       if (err.name === 'AbortError') return;
       setMessages(prev => {
         const updated = [...prev];
-        updated[assistantIndex].content += `\n\n**[Error: ${err.message}]**`;
+        updated[assistantIndex] = {
+          ...updated[assistantIndex],
+          content: updated[assistantIndex].content + `\n\n**[Error: ${err.message}]**`,
+          sources: []
+        };
         return updated;
       });
     } finally {
+      setMessages(prev => {
+        const updated = [...prev];
+        updated[assistantIndex] = {
+          ...updated[assistantIndex],
+          sources: receivedSources
+        };
+        return updated;
+      });
       setIsGenerating(false);
       loadSessions();
       if (isNewSession) {
@@ -167,14 +183,13 @@ export default function ChatView() {
                 ) : (
                   <div className="markdown-body">
                     {m.content ? <ReactMarkdown remarkPlugins={[remarkGfm]}>{m.content}</ReactMarkdown> : (isGenerating && i === messages.length-1) ? <em>Thinking...</em> : ''}
-                    {/* Sources displayed at end */}
-                    {m.role === 'assistant' && i === messages.length - 1 && sources.length > 0 && !isGenerating && (
+                    {m.role === 'assistant' && m.sources && m.sources.length > 0 && (
                       <div style={{ marginTop: '8px', fontSize: '12px', color: '#8892b0', borderTop: '1px solid rgba(255,255,255,0.1)', paddingTop: '4px' }}>
                         <strong>Sources:</strong>{" "}
-                        {sources.map((s, idx) => (
+                        {m.sources.map((s, idx) => (
                           <span key={idx}>
                             from <em>{s.filename}</em>{s.page ? `, Page ${s.page}` : ''}
-                            {idx < sources.length - 1 ? ' | ' : ''}
+                            {idx < m.sources.length - 1 ? ' | ' : ''}
                           </span>
                         ))}
                       </div>

@@ -8,22 +8,26 @@ from services.db_service import search_clients, search_tasks
 from services.embedding_service import get_embedding
 from services import db_service
 import json
+import logging
+
+logger = logging.getLogger("uvicorn")
 
 @tool
 def rag_search(query: str) -> str:
     """
     Search the company knowledge base for relevant information.
     Returns the top matching chunks with source details (document name and page).
-    Use the source details at the end of your answer, not inline.
     """
     embedding = get_embedding(query)
     results = db_service.similarity_search(embedding, top_k=5, threshold=0.15)
+    logger.info(f"RAG query: {query}, results: {len(results)}")
     if not results:
         return "No relevant information found in knowledge base."
     chunks = []
     for r in results:
         page = r["metadata"].get("page", "N/A")
         chunks.append(f"- {r['content'][:300]} (from {r['filename']}, page {page})")
+        logger.info(f"  chunk {r['chunk_index']}: {r['content'][:80]}...")
     return "\n".join(chunks)
 
 @tool
