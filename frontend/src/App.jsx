@@ -29,6 +29,7 @@ function App() {
       />
       <div style={{ flex: 1, position: 'relative', paddingTop: '16px' }}>
         <ChatView />
+
         {/* Document Panel – overlay on the right side */}
         {showDocuments && (
           <div style={{
@@ -52,7 +53,8 @@ function App() {
             <DocumentPanel />
           </div>
         )}
-        {/* Approval Queue – overlay on the left side or right */}
+
+        {/* Approval Queue – overlay on the right side */}
         {showApprovals && (
           <div style={{
             position: 'absolute',
