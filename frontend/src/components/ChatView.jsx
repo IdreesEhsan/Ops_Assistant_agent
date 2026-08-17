@@ -7,10 +7,13 @@ import remarkGfm from 'remark-gfm';
 export default function ChatView() {
   const [sessions, setSessions] = useState([]);
   const [currentSessionId, setCurrentSessionId] = useState(null);
-  const [messages, setMessages] = useState([{ role: 'assistant', content: 'Hello! I am your Ops Assistant. Ask me about clients, tasks, or documents.' }]);
+  const [messages, setMessages] = useState([
+    { role: 'assistant', content: 'Hello! I am your Ops Assistant. Ask me about clients, tasks, or documents.' }
+  ]);
   const [input, setInput] = useState('');
   const [isGenerating, setIsGenerating] = useState(false);
   const [userEmail, setUserEmail] = useState('');
+  const [sources, setSources] = useState([]);
   const messagesEndRef = useRef(null);
 
   useEffect(() => {
@@ -41,6 +44,7 @@ export default function ChatView() {
 
   const handleSelectSession = async (session) => {
     setCurrentSessionId(session.id);
+    setSources([]);
     try {
       const history = await fetchSessionMessages(session.id);
       const formatted = history.map(m => ({ role: m.role, content: m.content }));
@@ -51,6 +55,7 @@ export default function ChatView() {
   const handleNewChat = () => {
     setCurrentSessionId(null);
     setMessages([{ role: 'assistant', content: 'Hello! I am your Ops Assistant. Ask me about clients, tasks, or documents.' }]);
+    setSources([]);
   };
 
   const handleDeleteSession = async (sessionId) => {
@@ -71,8 +76,7 @@ export default function ChatView() {
     setInput('');
     setIsGenerating(true);
 
-    const isNewSession = !currentSessionId;   // capture before sending
-
+    const isNewSession = !currentSessionId;
     const assistantIndex = newMessages.length;
     setMessages(prev => [...prev, { role: 'assistant', content: '' }]);
 
@@ -92,7 +96,8 @@ export default function ChatView() {
         (assignedId) => {
           if (!currentSessionId) setCurrentSessionId(assignedId);
         },
-        controller.signal
+        controller.signal,
+        (src) => setSources(src)
       );
     } catch (err) {
       if (err.name === 'AbortError') return;
@@ -104,7 +109,6 @@ export default function ChatView() {
     } finally {
       setIsGenerating(false);
       loadSessions();
-      // Refresh again after a few seconds to pick up the AI-generated title
       if (isNewSession) {
         setTimeout(() => loadSessions(), 5000);
       }
@@ -113,25 +117,14 @@ export default function ChatView() {
 
   return (
     <div style={{
-      display: 'flex',
-      gap: '12px',
-      height: 'calc(100vh - 120px)',
-      padding: '0 8px',
-      width: '100%',
-      maxWidth: '100%',
-      boxSizing: 'border-box',
+      display: 'flex', gap: '12px', height: 'calc(100vh - 120px)',
+      padding: '0 8px', width: '100%', maxWidth: '100%', boxSizing: 'border-box',
     }}>
       {/* Sidebar */}
       <div style={{
-        width: '200px',
-        flexShrink: 0,
-        background: 'var(--bg-secondary)',
-        border: '1px solid var(--panel-border)',
-        borderRadius: '12px',
-        padding: '16px',
-        display: 'flex',
-        flexDirection: 'column',
-        gap: '12px',
+        width: '200px', flexShrink: 0, background: 'var(--bg-secondary)',
+        border: '1px solid var(--panel-border)', borderRadius: '12px',
+        padding: '16px', display: 'flex', flexDirection: 'column', gap: '12px',
       }}>
         <button onClick={handleNewChat} style={{ width: '100%', background: 'var(--accent-cyan)', color: '#000', border: 'none', padding: '10px', borderRadius: '8px', cursor: 'pointer' }}>
           <Plus size={16} /> New Chat
@@ -153,14 +146,9 @@ export default function ChatView() {
 
       {/* Main chat area */}
       <div style={{
-        flex: '1 1 0',
-        minWidth: 0,
-        background: 'var(--bg-secondary)',
-        border: '1px solid var(--panel-border)',
-        borderRadius: '12px',
-        display: 'flex',
-        flexDirection: 'column',
-        overflow: 'hidden',
+        flex: '1 1 0', minWidth: 0, background: 'var(--bg-secondary)',
+        border: '1px solid var(--panel-border)', borderRadius: '12px',
+        display: 'flex', flexDirection: 'column', overflow: 'hidden',
       }}>
         <div style={{ padding: '16px', borderBottom: '1px solid var(--panel-border)', fontSize: '14px' }}>
           Ops Assistant – RAG + Tools
@@ -170,18 +158,27 @@ export default function ChatView() {
             <div key={i} style={{ display: 'flex', gap: '12px', justifyContent: m.role === 'user' ? 'flex-end' : 'flex-start' }}>
               {m.role === 'assistant' && <Bot size={20} color="#00f2fe" />}
               <div style={{
-                maxWidth: '70%',
-                padding: '12px 16px',
-                borderRadius: '16px',
+                maxWidth: '70%', padding: '12px 16px', borderRadius: '16px',
                 background: m.role === 'user' ? 'rgba(0,242,254,0.2)' : 'rgba(255,255,255,0.05)',
-                border: '1px solid var(--panel-border)',
-                lineHeight: '1.5'
+                border: '1px solid var(--panel-border)', lineHeight: '1.5'
               }}>
                 {m.role === 'user' ? (
                   <div>{m.content}</div>
                 ) : (
                   <div className="markdown-body">
                     {m.content ? <ReactMarkdown remarkPlugins={[remarkGfm]}>{m.content}</ReactMarkdown> : (isGenerating && i === messages.length-1) ? <em>Thinking...</em> : ''}
+                    {/* Sources */}
+                    {m.role === 'assistant' && i === messages.length - 1 && sources.length > 0 && !isGenerating && (
+                      <div style={{ marginTop: '8px', fontSize: '12px', color: '#8892b0', borderTop: '1px solid rgba(255,255,255,0.1)', paddingTop: '4px' }}>
+                        <strong>Sources:</strong>{" "}
+                        {sources.map((s, idx) => (
+                          <span key={idx}>
+                            from <em>{s.filename}</em>{s.page ? `, Page ${s.page}` : ''}
+                            {idx < sources.length - 1 ? ' | ' : ''}
+                          </span>
+                        ))}
+                      </div>
+                    )}
                   </div>
                 )}
               </div>

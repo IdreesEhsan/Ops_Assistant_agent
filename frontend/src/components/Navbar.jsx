@@ -13,27 +13,14 @@ export default function Navbar({ setShowDocuments, setShowApprovals, onLogout })
           <button className="ops-tab active" style={{ border: 'none', background: 'transparent', cursor: 'pointer', color: 'var(--text-main)' }}>
             <MessageSquare size={16} /> Agent Chat
           </button>
-          <button
-            className="ops-tab"
-            onClick={() => setShowDocuments(prev => !prev)}
-            style={{ border: 'none', background: 'transparent', cursor: 'pointer', color: 'var(--text-muted)' }}
-          >
+          <button className="ops-tab" onClick={() => setShowDocuments(prev => !prev)} style={{ border: 'none', background: 'transparent', cursor: 'pointer', color: 'var(--text-muted)' }}>
             <FolderOpen size={16} /> Documents
           </button>
-          <button
-            className="ops-tab"
-            onClick={() => setShowApprovals(prev => !prev)}
-            style={{ border: 'none', background: 'transparent', cursor: 'pointer', color: 'var(--text-muted)' }}
-          >
+          <button className="ops-tab" onClick={() => setShowApprovals(prev => !prev)} style={{ border: 'none', background: 'transparent', cursor: 'pointer', color: 'var(--text-muted)' }}>
             <FileText size={16} /> Approval Queue
           </button>
         </nav>
-        <button
-          onClick={onLogout}
-          className="ops-tab"
-          style={{ border: 'none', background: 'transparent', cursor: 'pointer', color: '#f87171' }}
-          title="Logout"
-        >
+        <button onClick={onLogout} className="ops-tab" style={{ border: 'none', background: 'transparent', cursor: 'pointer', color: '#f87171' }} title="Logout">
           <LogOut size={16} /> Logout
         </button>
       </div>

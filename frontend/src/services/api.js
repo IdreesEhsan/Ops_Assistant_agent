@@ -8,40 +8,66 @@ const getHeaders = () => {
   return { 'Content-Type': 'application/json', ...(token ? { Authorization: `Bearer ${token}` } : {}) };
 };
 
-// Auth functions
+// Handle expired session globally
+export function handleAuthExpired() {
+  localStorage.removeItem('access_token');
+  window.dispatchEvent(new Event('auth_expired'));
+}
+
+// Wrapper that checks for 401 and triggers logout
+async function authFetch(url, options = {}) {
+  const res = await fetch(url, options);
+  if (res.status === 401) {
+    handleAuthExpired();
+    throw new Error('Session expired. Please log in again.');
+  }
+  return res;
+}
+
+// ========== Auth ==========
 export async function registerAPI(data) {
-  const res = await fetch(`${API_BASE_URL}/auth/register`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(data) });
+  const res = await fetch(`${API_BASE_URL}/auth/register`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(data)
+  });
   if (!res.ok) throw new Error((await res.json()).detail || 'Registration failed');
   return res.json();
 }
 
 export async function loginAPI(email, password) {
-  const res = await fetch(`${API_BASE_URL}/auth/login`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ email, password }) });
+  const res = await fetch(`${API_BASE_URL}/auth/login`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ email, password })
+  });
   if (!res.ok) throw new Error((await res.json()).detail || 'Login failed');
   return res.json();
 }
 
-export async function verifyOtpAPI(email, otp) {
-  const res = await fetch(`${API_BASE_URL}/auth/verify`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ email, otp }) });
-  if (!res.ok) throw new Error((await res.json()).detail || 'Verification failed');
-  return res.json();
-}
-
-// Chat functions
+// ========== Chat ==========
 export async function fetchSessions() {
-  const res = await fetch(`${API_BASE_URL}/chat/sessions`, { headers: getHeaders() });
+  const res = await authFetch(`${API_BASE_URL}/chat/sessions`, { headers: getHeaders() });
   if (!res.ok) throw new Error('Failed to fetch sessions');
   return res.json();
 }
 
 export async function fetchSessionMessages(sessionId) {
-  const res = await fetch(`${API_BASE_URL}/chat/sessions/${sessionId}/messages`, { headers: getHeaders() });
+  const res = await authFetch(`${API_BASE_URL}/chat/sessions/${sessionId}/messages`, { headers: getHeaders() });
   if (!res.ok) throw new Error('Failed to fetch messages');
   return res.json();
 }
 
-export async function streamChat(messages, systemPrompt, onChunk, sessionId, onSessionCreated, signal) {
-  const res = await fetch(`${API_BASE_URL}/chat`, {
+export async function streamChat(
+  messages,
+  systemPrompt,
+  onChunk,
+  sessionId,
+  onSessionCreated,
+  signal,
+  onSources
+) {
+  const res = await authFetch(`${API_BASE_URL}/chat`, {
     method: 'POST',
     headers: getHeaders(),
     signal,
@@ -65,42 +91,51 @@ export async function streamChat(messages, systemPrompt, onChunk, sessionId, onS
           const parsed = JSON.parse(data);
           if (parsed.session_id && onSessionCreated) onSessionCreated(parsed.session_id);
           if (parsed.content) onChunk(parsed.content);
-        } catch(e) {}
+          if (parsed.sources && onSources) onSources(parsed.sources);
+        } catch (e) {}
       }
     }
   }
 }
 
-// Document functions
+// ========== Documents ==========
 export async function uploadDocument(file) {
   const formData = new FormData();
   formData.append('file', file);
-  const res = await fetch(`${API_BASE_URL}/documents/upload`, { method: 'POST', headers: { Authorization: `Bearer ${localStorage.getItem('access_token')}` }, body: formData });
+  const res = await authFetch(`${API_BASE_URL}/documents/upload`, {
+    method: 'POST',
+    headers: { Authorization: `Bearer ${localStorage.getItem('access_token')}` },
+    body: formData
+  });
   if (!res.ok) throw new Error('Upload failed');
   return res.json();
 }
 
 export async function fetchDocuments() {
-  const res = await fetch(`${API_BASE_URL}/documents/`, { headers: getHeaders() });
+  const res = await authFetch(`${API_BASE_URL}/documents/`, { headers: getHeaders() });
   if (!res.ok) throw new Error('Failed to fetch documents');
   return res.json();
 }
 
 export async function deleteDocument(docId) {
-  const res = await fetch(`${API_BASE_URL}/documents/${docId}`, { method: 'DELETE', headers: getHeaders() });
+  const res = await authFetch(`${API_BASE_URL}/documents/${docId}`, { method: 'DELETE', headers: getHeaders() });
   if (!res.ok) throw new Error('Delete failed');
   return res.json();
 }
 
-// Email approval functions
+// ========== Emails ==========
 export async function fetchPendingEmails() {
-  const res = await fetch(`${API_BASE_URL}/emails/pending`, { headers: getHeaders() });
+  const res = await authFetch(`${API_BASE_URL}/emails/pending`, { headers: getHeaders() });
   if (!res.ok) throw new Error('Failed to fetch emails');
   return res.json();
 }
 
 export async function approveEmail(emailId, approve) {
-  const res = await fetch(`${API_BASE_URL}/emails/approve`, { method: 'POST', headers: getHeaders(), body: JSON.stringify({ email_log_id: emailId, approve }) });
+  const res = await authFetch(`${API_BASE_URL}/emails/approve`, {
+    method: 'POST',
+    headers: getHeaders(),
+    body: JSON.stringify({ email_log_id: emailId, approve })
+  });
   if (!res.ok) throw new Error('Approval failed');
   return res.json();
 }

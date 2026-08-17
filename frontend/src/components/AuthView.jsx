@@ -2,7 +2,7 @@ import React, { useState, useMemo } from 'react';
 import { registerAPI, loginAPI } from '../services/api';
 import { Mail, Lock, User as UserIcon, Hash, MapPin, ShieldCheck, CheckCircle, XCircle } from 'lucide-react';
 
-export default function AuthView({ onLoginSuccess }) {
+export default function AuthView({ onLoginSuccess, sessionExpired }) {
   const [mode, setMode] = useState('login');
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
@@ -27,10 +27,7 @@ export default function AuthView({ onLoginSuccess }) {
 
   const handleAgeChange = (e) => {
     const val = e.target.value;
-    if (val === '') {
-      setAge('');
-      return;
-    }
+    if (val === '') { setAge(''); return; }
     const num = parseInt(val, 10);
     if (!isNaN(num) && num >= 0) setAge(val);
   };
@@ -136,16 +133,30 @@ export default function AuthView({ onLoginSuccess }) {
           margin: '0 0 14px 0',
         }} />
 
+        {sessionExpired && (
+          <div style={{
+            display: 'flex',
+            alignItems: 'center',
+            gap: '6px',
+            background: 'rgba(248,113,113,0.1)',
+            border: '1px solid rgba(248,113,113,0.3)',
+            color: '#f87171',
+            padding: '10px',
+            borderRadius: '6px',
+            marginBottom: '10px',
+            fontSize: '13px',
+          }}>
+            <XCircle size={14} />
+            Session expired. Please log in again.
+          </div>
+        )}
+
         {mode === 'registered' ? (
           <div style={{ textAlign: 'center', padding: '16px 0 8px 0' }}>
             <div style={{
-              width: '64px',
-              height: '64px',
-              borderRadius: '50%',
+              width: '64px', height: '64px', borderRadius: '50%',
               background: 'rgba(0,242,254,0.1)',
-              display: 'flex',
-              alignItems: 'center',
-              justifyContent: 'center',
+              display: 'flex', alignItems: 'center', justifyContent: 'center',
               margin: '0 auto 16px',
               border: '2px solid rgba(0,242,254,0.3)',
             }}>
@@ -161,18 +172,12 @@ export default function AuthView({ onLoginSuccess }) {
             <button
               onClick={goToLogin}
               style={{
-                width: '100%',
-                padding: '8px',
+                width: '100%', padding: '8px',
                 background: 'linear-gradient(135deg, #00f2fe, #c043ff)',
-                color: '#fff',
-                border: 'none',
-                borderRadius: '6px',
-                fontSize: '14px',
-                fontWeight: '600',
-                cursor: 'pointer',
+                color: '#fff', border: 'none', borderRadius: '6px',
+                fontSize: '14px', fontWeight: '600', cursor: 'pointer',
                 transition: 'all 0.3s ease',
-                boxShadow: '0 4px 15px rgba(0,242,254,0.3)',
-                height: '40px',
+                boxShadow: '0 4px 15px rgba(0,242,254,0.3)', height: '40px',
               }}
               onMouseEnter={(e) => e.currentTarget.style.boxShadow = '0 6px 20px rgba(0,242,254,0.5)'}
               onMouseLeave={(e) => e.currentTarget.style.boxShadow = '0 4px 15px rgba(0,242,254,0.3)'}
@@ -185,25 +190,18 @@ export default function AuthView({ onLoginSuccess }) {
             <div style={{ display: 'flex', justifyContent: 'center', marginBottom: '14px' }}>
               <div style={{
                 background: 'linear-gradient(135deg, #00f2fe, #c043ff)',
-                width: '48px',
-                height: '48px',
-                borderRadius: '12px',
-                display: 'flex',
-                alignItems: 'center',
-                justifyContent: 'center',
+                width: '48px', height: '48px', borderRadius: '12px',
+                display: 'flex', alignItems: 'center', justifyContent: 'center',
               }}>
                 <ShieldCheck size={24} color="#fff" />
               </div>
             </div>
 
             <h1 style={{
-              textAlign: 'center',
-              fontSize: '22px',
-              fontWeight: '700',
+              textAlign: 'center', fontSize: '22px', fontWeight: '700',
               margin: '0 0 4px',
               background: 'linear-gradient(90deg, #ffffff, #00f2fe)',
-              WebkitBackgroundClip: 'text',
-              WebkitTextFillColor: 'transparent',
+              WebkitBackgroundClip: 'text', WebkitTextFillColor: 'transparent',
             }}>
               {title}
             </h1>
@@ -216,8 +214,8 @@ export default function AuthView({ onLoginSuccess }) {
                 display: 'flex', alignItems: 'center', gap: '6px',
                 background: 'rgba(248,113,113,0.1)',
                 border: '1px solid rgba(248,113,113,0.3)',
-                color: '#f87171',
-                padding: '6px 12px', borderRadius: '6px', marginBottom: '10px', fontSize: '12px',
+                color: '#f87171', padding: '6px 12px', borderRadius: '6px',
+                marginBottom: '10px', fontSize: '12px',
               }}>
                 <XCircle size={14} />
                 {error}
@@ -228,8 +226,8 @@ export default function AuthView({ onLoginSuccess }) {
                 display: 'flex', alignItems: 'center', gap: '6px',
                 background: 'rgba(0,242,254,0.1)',
                 border: '1px solid rgba(0,242,254,0.3)',
-                color: '#00f2fe',
-                padding: '6px 12px', borderRadius: '6px', marginBottom: '10px', fontSize: '12px',
+                color: '#00f2fe', padding: '6px 12px', borderRadius: '6px',
+                marginBottom: '10px', fontSize: '12px',
               }}>
                 <CheckCircle size={14} />
                 {success}
@@ -245,10 +243,7 @@ export default function AuthView({ onLoginSuccess }) {
                   </div>
                   <div style={{ position: 'relative' }}>
                     <Hash size={14} style={{ position: 'absolute', left: '10px', top: '50%', transform: 'translateY(-50%)', color: '#64748b' }} />
-                    <input
-                      type="number" min="0" step="1" placeholder="Age"
-                      value={age} onChange={handleAgeChange} onBlur={handleAgeBlur} style={inputStyle}
-                    />
+                    <input type="number" min="0" step="1" placeholder="Age" value={age} onChange={handleAgeChange} onBlur={handleAgeBlur} style={inputStyle} />
                   </div>
                   <div style={{ position: 'relative' }}>
                     <MapPin size={14} style={{ position: 'absolute', left: '10px', top: '50%', transform: 'translateY(-50%)', color: '#64748b' }} />
@@ -280,9 +275,10 @@ export default function AuthView({ onLoginSuccess }) {
                 style={{
                   width: '100%', padding: '6px', marginTop: '4px',
                   background: loading ? 'rgba(0,242,254,0.3)' : 'linear-gradient(135deg, #00f2fe, #c043ff)',
-                  color: '#fff', border: 'none', borderRadius: '6px', fontSize: '14px', fontWeight: '600',
-                  cursor: loading ? 'not-allowed' : 'pointer', transition: 'all 0.3s ease',
-                  boxShadow: '0 4px 15px rgba(0,242,254,0.3)', height: '40px', opacity: loading ? 0.6 : 1,
+                  color: '#fff', border: 'none', borderRadius: '6px',
+                  fontSize: '14px', fontWeight: '600', cursor: loading ? 'not-allowed' : 'pointer',
+                  transition: 'all 0.3s ease', boxShadow: '0 4px 15px rgba(0,242,254,0.3)',
+                  height: '40px', opacity: loading ? 0.6 : 1,
                 }}
               >
                 {buttonText}
