@@ -15,67 +15,66 @@ export default function ChatView() {
   const [userEmail, setUserEmail] = useState('');
   const messagesEndRef = useRef(null);
 
-  // Cache entire message list per session (includes sources)
-  const [sessionMessagesCache, setSessionMessagesCache] = useState({});
+  // Save current session to localStorage
+  useEffect(() => {
+    if (currentSessionId) {
+      localStorage.setItem('ops_current_session_id', currentSessionId);
+    } else {
+      localStorage.removeItem('ops_current_session_id');
+    }
+  }, [currentSessionId]);
 
   // Auto-scroll
   useEffect(() => {
     messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' });
   }, [messages]);
 
-  // Initial load + JWT decode
+  // Initial load: fetch sessions, decode JWT, restore active session
   useEffect(() => {
-    loadSessions();
-    try {
-      const token = localStorage.getItem('access_token');
-      if (token) {
-        const base64Url = token.split('.')[1];
-        const base64 = base64Url.replace(/-/g, '+').replace(/_/g, '/');
-        const payload = JSON.parse(decodeURIComponent(atob(base64).split('').map(c => '%' + ('00' + c.charCodeAt(0).toString(16)).slice(-2)).join('')));
-        setUserEmail(payload.email || 'User');
+    const initialize = async () => {
+      await loadSessions();
+      try {
+        const token = localStorage.getItem('access_token');
+        if (token) {
+          const base64Url = token.split('.')[1];
+          const base64 = base64Url.replace(/-/g, '+').replace(/_/g, '/');
+          const payload = JSON.parse(decodeURIComponent(atob(base64).split('').map(c => '%' + ('00' + c.charCodeAt(0).toString(16)).slice(-2)).join('')));
+          setUserEmail(payload.email || 'User');
+        }
+      } catch (e) { console.error('JWT decode failed', e); }
+
+      const savedSessionId = localStorage.getItem('ops_current_session_id');
+      if (savedSessionId) {
+        const session = (await fetchSessions()).find(s => s.id === savedSessionId);
+        if (session) {
+          await handleSelectSession(session);
+        }
       }
-    } catch (e) { console.error('JWT decode failed', e); }
+    };
+    initialize();
   }, []);
 
   const loadSessions = async () => {
     try {
       const data = await fetchSessions();
       setSessions(data || []);
+      return data || [];
     } catch (err) {
       console.error('Failed to fetch sessions', err);
+      return [];
     }
   };
 
   const handleSelectSession = async (session) => {
-    // Save current messages to cache before switching
-    if (currentSessionId) {
-      setSessionMessagesCache(prev => ({ ...prev, [currentSessionId]: messages }));
-    }
-
     setCurrentSessionId(session.id);
-
-    // Check if we have cached messages for this session
-    if (sessionMessagesCache[session.id]) {
-      setMessages(sessionMessagesCache[session.id]);
-      return;
-    }
-
-    // Otherwise fetch from backend
     try {
       const history = await fetchSessionMessages(session.id);
-      const formatted = history.map(m => ({ role: m.role, content: m.content, sources: [] }));
-      const loadedMessages = formatted.length ? formatted : [{ role: 'assistant', content: 'Conversation loaded.', sources: [] }];
-      setMessages(loadedMessages);
-      // Cache the loaded messages too
-      setSessionMessagesCache(prev => ({ ...prev, [session.id]: loadedMessages }));
+      const formatted = history.map(m => ({ role: m.role, content: m.content, sources: m.sources || [] }));
+      setMessages(formatted.length ? formatted : [{ role: 'assistant', content: 'Conversation loaded.', sources: [] }]);
     } catch (err) { console.error(err); }
   };
 
   const handleNewChat = () => {
-    // Save current session messages to cache (if any)
-    if (currentSessionId) {
-      setSessionMessagesCache(prev => ({ ...prev, [currentSessionId]: messages }));
-    }
     setCurrentSessionId(null);
     setMessages([{ role: 'assistant', content: 'Hello! I am your Ops Assistant. Ask me about clients, tasks, or documents.', sources: [] }]);
   };
@@ -85,12 +84,6 @@ export default function ChatView() {
     await fetch(`${BASE}/api/chat/sessions/${sessionId}`, {
       method: 'DELETE',
       headers: { Authorization: `Bearer ${localStorage.getItem('access_token')}` }
-    });
-    // Remove session from cache
-    setSessionMessagesCache(prev => {
-      const updated = { ...prev };
-      delete updated[sessionId];
-      return updated;
     });
     loadSessions();
     if (currentSessionId === sessionId) handleNewChat();
@@ -146,23 +139,14 @@ export default function ChatView() {
         return updated;
       });
     } finally {
-      // After stream ends, attach sources to the assistant message
       setMessages(prev => {
         const updated = [...prev];
         updated[assistantIndex] = {
           ...updated[assistantIndex],
           sources: receivedSources
         };
-        // Update cache for current session (if known)
-        if (currentSessionId) {
-          setSessionMessagesCache(cache => ({
-            ...cache,
-            [currentSessionId]: updated
-          }));
-        }
         return updated;
       });
-
       setIsGenerating(false);
       loadSessions();
       if (isNewSession) {

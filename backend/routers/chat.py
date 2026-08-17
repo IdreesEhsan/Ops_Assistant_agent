@@ -5,16 +5,16 @@ from services.agent import app
 from services.llm_service import generate_chat_title
 from dependencies import get_current_user
 from services import db_service
-from langchain_core.messages import HumanMessage, AIMessage, AIMessageChunk
+from langchain_core.messages import HumanMessage, AIMessage, AIMessageChunk, ToolMessage
 import json
 import asyncio
 import logging
+import re
 
 router = APIRouter(prefix="/api/chat", tags=["chat"])
 logger = logging.getLogger("uvicorn")
 
 async def generate_and_update_title(session_id: str, user_message: str):
-    """Generate a title using the LLM and update the session."""
     try:
         title = await generate_chat_title(user_message)
         if title:
@@ -27,7 +27,6 @@ async def generate_and_update_title(session_id: str, user_message: str):
         fallback = " ".join(user_message.strip().split()[:6])
         db_service.update_session_title(session_id, fallback)
 
-# ---------- Session management ----------
 @router.get("/sessions")
 def list_sessions(user=Depends(get_current_user)):
     return db_service.get_all_sessions(user.id)
@@ -60,7 +59,6 @@ def delete_session(session_id: str, user=Depends(get_current_user)):
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
 
-# ---------- Main agent chat endpoint ----------
 @router.post("")
 async def chat_endpoint(request: ChatRequest, user=Depends(get_current_user)):
     session_id = request.session_id
@@ -69,7 +67,6 @@ async def chat_endpoint(request: ChatRequest, user=Depends(get_current_user)):
         session_id = session["id"]
 
     user_msg = request.messages[-1].content
-    # Save user message with empty sources
     db_service.save_message(session_id, role="user", content=user_msg, sources=[])
 
     if not request.session_id:
@@ -84,47 +81,59 @@ async def chat_endpoint(request: ChatRequest, user=Depends(get_current_user)):
 
     async def stream_agent_response():
         full_response = ""
+        current_turn_sources = []
+        # Map tool_call_id -> tool_name
+        tool_call_map = {}
+
         yield f"data: {json.dumps({'session_id': session_id})}\n\n"
 
         config = {"configurable": {"thread_id": session_id}}
         try:
-            # Reset rag_sources for this turn by including empty list
-            initial_state = {
-                "messages": lc_messages,
-                "session_id": session_id,
-                "user_id": user.id,
-                "rag_sources": []
-            }
-
-            # Stream token by token
             async for message_chunk, metadata in app.astream(
-                initial_state,
+                {"messages": lc_messages, "session_id": session_id, "user_id": user.id, "rag_sources": []},
                 config,
                 stream_mode="messages"
             ):
-                if isinstance(message_chunk, AIMessageChunk) and message_chunk.content:
-                    token = message_chunk.content
-                    full_response += token
-                    yield f"data: {json.dumps({'content': token})}\n\n"
+                # 1) Accumulate tool call IDs from AIMessageChunk
+                if isinstance(message_chunk, AIMessageChunk):
+                    # tool_call_chunks may be present
+                    if hasattr(message_chunk, "tool_call_chunks") and message_chunk.tool_call_chunks:
+                        for tc_chunk in message_chunk.tool_call_chunks:
+                            if tc_chunk.get("id") and tc_chunk.get("name"):
+                                tool_call_map[tc_chunk["id"]] = tc_chunk["name"]
 
-            # After streaming, get final state to retrieve this turn's sources
-            final_state = await app.aget_state(config)
-            rag_sources = final_state.values.get("rag_sources", [])
+                    # stream content
+                    if message_chunk.content:
+                        token = message_chunk.content
+                        full_response += token
+                        yield f"data: {json.dumps({'content': token})}\n\n"
 
-            # Save assistant message with sources
+                # 2) ToolMessage: match with tool_call_map to know if it's rag_search
+                elif isinstance(message_chunk, ToolMessage):
+                    tool_name = tool_call_map.get(message_chunk.tool_call_id, "")
+                    if tool_name == "rag_search":
+                        for line in message_chunk.content.split("\n"):
+                            match = re.search(r'\(from\s+([^,]+),\s*page\s+([^)]+)\)', line)
+                            if match:
+                                current_turn_sources.append({
+                                    "filename": match.group(1).strip(),
+                                    "page": match.group(2).strip()
+                                })
+
+            # After stream ends, save assistant message with sources
             if full_response:
-                db_service.save_message(session_id, role="assistant", content=full_response, sources=rag_sources)
+                db_service.save_message(session_id, role="assistant", content=full_response, sources=current_turn_sources)
+            else:
+                fallback = "I couldn't generate a response. Please try again."
+                db_service.save_message(session_id, role="assistant", content=fallback, sources=[])
+                yield f"data: {json.dumps({'content': fallback})}\n\n"
 
-            yield f"data: {json.dumps({'sources': rag_sources})}\n\n"
+            # Send sources to frontend
+            yield f"data: {json.dumps({'sources': current_turn_sources})}\n\n"
 
         except Exception as e:
             logger.error(f"Agent streaming error: {e}")
             yield f"data: {json.dumps({'error': str(e)})}\n\n"
-
-        if not full_response:
-            fallback = "I couldn't generate a response. Please try again."
-            db_service.save_message(session_id, role="assistant", content=fallback, sources=[])
-            yield f"data: {json.dumps({'content': fallback})}\n\n"
 
         yield "data: [DONE]\n\n"
 
