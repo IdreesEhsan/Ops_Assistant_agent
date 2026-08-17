@@ -59,6 +59,13 @@ body {
   display: flex;
   align-items: center;
   gap: 8px;
+  font-size: 14px;
+  transition: all 0.2s ease;
+}
+
+.ops-tab:hover {
+  border-color: var(--accent-cyan);
+  color: var(--accent-cyan);
 }
 
 .ops-tab.active {
