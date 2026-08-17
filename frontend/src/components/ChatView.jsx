@@ -106,18 +106,16 @@ export default function ChatView() {
   };
 
   return (
-    /* ===== FIXED: full-width container, no max-width ===== */
     <div style={{
       display: 'flex',
       gap: '12px',
       height: 'calc(100vh - 120px)',
       padding: '0 8px',
-      width: '100%',            // 🔥 force full width
-      maxWidth: '100%',         // 🔥 remove any implicit max-width
+      width: '100%',
+      maxWidth: '100%',
       boxSizing: 'border-box',
-      margin: '0 auto',         // optional: center if parent has padding, but we want full width
     }}>
-      {/* Sidebar – fixed width */}
+      {/* Sidebar */}
       <div style={{
         width: '200px',
         flexShrink: 0,
@@ -147,9 +145,9 @@ export default function ChatView() {
         </div>
       </div>
 
-      {/* ===== Main chat area – takes ALL remaining space ===== */}
+      {/* Main chat area */}
       <div style={{
-        flex: '1 1 0',           // 🔥 aggressively fills remaining width
+        flex: '1 1 0',
         minWidth: 0,
         background: 'var(--bg-secondary)',
         border: '1px solid var(--panel-border)',
