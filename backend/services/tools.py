@@ -11,17 +11,19 @@ import json
 
 @tool
 def rag_search(query: str) -> str:
-    """Search the company knowledge base for relevant information."""
+    """
+    Search the company knowledge base for relevant information.
+    Returns the top matching chunks with source details (document name and page).
+    Use the source details at the end of your answer, not inline.
+    """
     embedding = get_embedding(query)
     results = db_service.similarity_search(embedding, top_k=5, threshold=0.15)
-    print(f"RAG query: {query}, results: {len(results)}")
     if not results:
         return "No relevant information found in knowledge base."
     chunks = []
     for r in results:
         page = r["metadata"].get("page", "N/A")
         chunks.append(f"- {r['content'][:300]} (from {r['filename']}, page {page})")
-        print(f"  chunk {r['chunk_index']}: {r['content'][:80]}...")
     return "\n".join(chunks)
 
 @tool
@@ -54,7 +56,7 @@ def calculator(expression: str) -> str:
     """
     allowed_chars = "0123456789+-*/(). "
     if any(c not in allowed_chars for c in expression):
-        return "Invalid expression."
+        return "Invalid expression. Only numbers and + - * / ( ) are allowed."
     try:
         result = eval(expression)
         return str(result)
@@ -67,6 +69,4 @@ def draft_email(to: str, subject: str, body: str) -> str:
     Create an email draft. Does NOT send the email.
     The draft will be stored for human approval before sending.
     """
-    # Actual draft creation is handled in the agent's tool_node to capture session/user ID.
     return f"Email draft prepared to {to}: {subject}"
-

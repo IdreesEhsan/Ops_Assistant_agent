@@ -97,7 +97,7 @@ export default function ChatView() {
           if (!currentSessionId) setCurrentSessionId(assignedId);
         },
         controller.signal,
-        (src) => setSources(src)
+        (src) => setSources(src)   // <-- receives sources at end
       );
     } catch (err) {
       if (err.name === 'AbortError') return;
@@ -167,7 +167,7 @@ export default function ChatView() {
                 ) : (
                   <div className="markdown-body">
                     {m.content ? <ReactMarkdown remarkPlugins={[remarkGfm]}>{m.content}</ReactMarkdown> : (isGenerating && i === messages.length-1) ? <em>Thinking...</em> : ''}
-                    {/* Sources */}
+                    {/* Sources displayed at end */}
                     {m.role === 'assistant' && i === messages.length - 1 && sources.length > 0 && !isGenerating && (
                       <div style={{ marginTop: '8px', fontSize: '12px', color: '#8892b0', borderTop: '1px solid rgba(255,255,255,0.1)', paddingTop: '4px' }}>
                         <strong>Sources:</strong>{" "}
