@@ -15,10 +15,15 @@ export default function ChatView() {
   const [userEmail, setUserEmail] = useState('');
   const messagesEndRef = useRef(null);
 
+  // Cache entire message list per session (includes sources)
+  const [sessionMessagesCache, setSessionMessagesCache] = useState({});
+
+  // Auto-scroll
   useEffect(() => {
     messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' });
   }, [messages]);
 
+  // Initial load + JWT decode
   useEffect(() => {
     loadSessions();
     try {
@@ -42,15 +47,35 @@ export default function ChatView() {
   };
 
   const handleSelectSession = async (session) => {
+    // Save current messages to cache before switching
+    if (currentSessionId) {
+      setSessionMessagesCache(prev => ({ ...prev, [currentSessionId]: messages }));
+    }
+
     setCurrentSessionId(session.id);
+
+    // Check if we have cached messages for this session
+    if (sessionMessagesCache[session.id]) {
+      setMessages(sessionMessagesCache[session.id]);
+      return;
+    }
+
+    // Otherwise fetch from backend
     try {
       const history = await fetchSessionMessages(session.id);
       const formatted = history.map(m => ({ role: m.role, content: m.content, sources: [] }));
-      setMessages(formatted.length ? formatted : [{ role: 'assistant', content: 'Conversation loaded.', sources: [] }]);
+      const loadedMessages = formatted.length ? formatted : [{ role: 'assistant', content: 'Conversation loaded.', sources: [] }];
+      setMessages(loadedMessages);
+      // Cache the loaded messages too
+      setSessionMessagesCache(prev => ({ ...prev, [session.id]: loadedMessages }));
     } catch (err) { console.error(err); }
   };
 
   const handleNewChat = () => {
+    // Save current session messages to cache (if any)
+    if (currentSessionId) {
+      setSessionMessagesCache(prev => ({ ...prev, [currentSessionId]: messages }));
+    }
     setCurrentSessionId(null);
     setMessages([{ role: 'assistant', content: 'Hello! I am your Ops Assistant. Ask me about clients, tasks, or documents.', sources: [] }]);
   };
@@ -60,6 +85,12 @@ export default function ChatView() {
     await fetch(`${BASE}/api/chat/sessions/${sessionId}`, {
       method: 'DELETE',
       headers: { Authorization: `Bearer ${localStorage.getItem('access_token')}` }
+    });
+    // Remove session from cache
+    setSessionMessagesCache(prev => {
+      const updated = { ...prev };
+      delete updated[sessionId];
+      return updated;
     });
     loadSessions();
     if (currentSessionId === sessionId) handleNewChat();
@@ -115,14 +146,23 @@ export default function ChatView() {
         return updated;
       });
     } finally {
+      // After stream ends, attach sources to the assistant message
       setMessages(prev => {
         const updated = [...prev];
         updated[assistantIndex] = {
           ...updated[assistantIndex],
           sources: receivedSources
         };
+        // Update cache for current session (if known)
+        if (currentSessionId) {
+          setSessionMessagesCache(cache => ({
+            ...cache,
+            [currentSessionId]: updated
+          }));
+        }
         return updated;
       });
+
       setIsGenerating(false);
       loadSessions();
       if (isNewSession) {
