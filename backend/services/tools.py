@@ -11,18 +11,17 @@ import json
 
 @tool
 def rag_search(query: str) -> str:
-    """
-    Search the company knowledge base for relevant information.
-    Returns the top matching chunks with source filename and page number.
-    """
+    """Search the company knowledge base for relevant information."""
     embedding = get_embedding(query)
     results = db_service.similarity_search(embedding, top_k=5, threshold=0.15)
+    print(f"RAG query: {query}, results: {len(results)}")
     if not results:
         return "No relevant information found in knowledge base."
     chunks = []
     for r in results:
         page = r["metadata"].get("page", "N/A")
         chunks.append(f"- {r['content'][:300]} (from {r['filename']}, page {page})")
+        print(f"  chunk {r['chunk_index']}: {r['content'][:80]}...")
     return "\n".join(chunks)
 
 @tool

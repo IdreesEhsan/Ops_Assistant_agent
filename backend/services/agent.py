@@ -84,7 +84,9 @@ def tool_node(state: AgentState):
             tool = tool_map[tool_name]
             result = tool.invoke(tool_args)
             outputs.append(ToolMessage(content=str(result), tool_call_id=tool_call["id"]))
-
+    for tool_call in last_message.tool_calls:
+        tool_name = tool_call["name"]
+        print(f"Tool called: {tool_name} with args: {tool_call['args']}")
     return {"messages": outputs, "status": "continue"}
 
 def should_continue(state: AgentState) -> Literal["tools", "end"]:
