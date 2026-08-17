@@ -50,7 +50,7 @@ export default function ChatView() {
 
   const handleNewChat = () => {
     setCurrentSessionId(null);
-    setMessages([{ role: 'assistant', content: 'New chat started.' }]);
+    setMessages([{ role: 'assistant', content: 'Hello! I am your Ops Assistant. Ask me about clients, tasks, or documents.' }]);
   };
 
   const handleDeleteSession = async (sessionId) => {
