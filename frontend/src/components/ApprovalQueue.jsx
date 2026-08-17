@@ -24,7 +24,7 @@ export default function ApprovalQueue() {
   };
 
   return (
-    <div style={{ width: '300px', background: 'var(--bg-secondary)', border: '1px solid var(--panel-border)', borderRadius: '12px', padding: '16px', overflowY: 'auto' }}>
+    <div style={{ width: '100%', background: 'var(--bg-secondary)', border: '1px solid var(--panel-border)', borderRadius: '12px', padding: '16px', overflowY: 'auto' }}>
       <h2 style={{ fontSize: '18px' }}>Approval Queue</h2>
       {emails.length === 0 && <p style={{ color: 'var(--text-muted)' }}>No pending emails.</p>}
       {emails.map(email => (
