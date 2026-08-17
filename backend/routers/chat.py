@@ -14,6 +14,7 @@ router = APIRouter(prefix="/api/chat", tags=["chat"])
 logger = logging.getLogger("uvicorn")
 
 async def generate_and_update_title(session_id: str, user_message: str):
+    """Generate a title using the LLM and update the session."""
     try:
         title = await generate_chat_title(user_message)
         if title:
@@ -68,7 +69,8 @@ async def chat_endpoint(request: ChatRequest, user=Depends(get_current_user)):
         session_id = session["id"]
 
     user_msg = request.messages[-1].content
-    db_service.save_message(session_id, role="user", content=user_msg)
+    # Save user message with empty sources
+    db_service.save_message(session_id, role="user", content=user_msg, sources=[])
 
     if not request.session_id:
         asyncio.create_task(generate_and_update_title(session_id, user_msg))
@@ -86,14 +88,15 @@ async def chat_endpoint(request: ChatRequest, user=Depends(get_current_user)):
 
         config = {"configurable": {"thread_id": session_id}}
         try:
-            # IMPORTANT: reset rag_sources for this turn
+            # Reset rag_sources for this turn by including empty list
             initial_state = {
                 "messages": lc_messages,
                 "session_id": session_id,
                 "user_id": user.id,
-                "rag_sources": []      # clears previous turn's sources
+                "rag_sources": []
             }
 
+            # Stream token by token
             async for message_chunk, metadata in app.astream(
                 initial_state,
                 config,
@@ -104,20 +107,23 @@ async def chat_endpoint(request: ChatRequest, user=Depends(get_current_user)):
                     full_response += token
                     yield f"data: {json.dumps({'content': token})}\n\n"
 
-            # After streaming, get final state (with current turn's sources)
+            # After streaming, get final state to retrieve this turn's sources
             final_state = await app.aget_state(config)
             rag_sources = final_state.values.get("rag_sources", [])
+
+            # Save assistant message with sources
+            if full_response:
+                db_service.save_message(session_id, role="assistant", content=full_response, sources=rag_sources)
+
             yield f"data: {json.dumps({'sources': rag_sources})}\n\n"
 
         except Exception as e:
             logger.error(f"Agent streaming error: {e}")
             yield f"data: {json.dumps({'error': str(e)})}\n\n"
 
-        if full_response:
-            db_service.save_message(session_id, role="assistant", content=full_response)
-        else:
+        if not full_response:
             fallback = "I couldn't generate a response. Please try again."
-            db_service.save_message(session_id, role="assistant", content=fallback)
+            db_service.save_message(session_id, role="assistant", content=fallback, sources=[])
             yield f"data: {json.dumps({'content': fallback})}\n\n"
 
         yield "data: [DONE]\n\n"

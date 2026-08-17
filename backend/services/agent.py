@@ -24,7 +24,7 @@ class AgentState(TypedDict):
     user_id: str
     pending_draft: dict | None
     status: str
-    rag_sources: List[dict]          # normal field, overwritten
+    rag_sources: List[dict]          # normal field, overwritten each turn
 
 
 def extract_sources_from_rag_output(content: str) -> List[dict]:
