@@ -1,4 +1,4 @@
-from fastapi import APIRouter, Depends
+from fastapi import APIRouter, Depends, HTTPException
 from fastapi.responses import StreamingResponse
 from models.schemas import ChatRequest, CreateSessionRequest
 from services.agent import app
@@ -8,6 +8,17 @@ from langchain_core.messages import HumanMessage, AIMessage
 import json
 
 router = APIRouter(prefix="/api/chat", tags=["chat"])
+
+# ---------- Helper: generate chat title from first user message ----------
+def generate_title_from_message(message: str) -> str:
+    """Create a short title from the first 6 words of the user message."""
+    words = message.strip().split()
+    if not words:
+        return "New Chat"
+    title = " ".join(words[:6])
+    if len(words) > 6:
+        title += "..."
+    return title
 
 # ---------- Session management ----------
 @router.get("/sessions")
@@ -25,6 +36,27 @@ def get_session_messages(session_id: str, user=Depends(get_current_user)):
     """Retrieve messages in a session."""
     return db_service.get_session_messages(session_id)
 
+@router.delete("/sessions/{session_id}")
+def delete_session(session_id: str, user=Depends(get_current_user)):
+    """Delete a chat session and all its messages (CASCADE)."""
+    try:
+        existing = (
+            db_service.supabase.table("chat_sessions")
+            .select("*")
+            .eq("id", session_id)
+            .eq("user_id", user.id)
+            .execute()
+        )
+        if not existing.data:
+            raise HTTPException(status_code=404, detail="Session not found")
+
+        db_service.supabase.table("chat_sessions").delete().eq("id", session_id).execute()
+        return {"status": "deleted"}
+    except HTTPException:
+        raise
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
+
 # ---------- Main agent chat endpoint ----------
 @router.post("")
 async def chat_endpoint(request: ChatRequest, user=Depends(get_current_user)):
@@ -34,12 +66,18 @@ async def chat_endpoint(request: ChatRequest, user=Depends(get_current_user)):
     """
     session_id = request.session_id
     if not session_id:
+        # Create a new session
         session = db_service.create_chat_session(user.id, system_prompt=request.system_prompt)
         session_id = session["id"]
 
     # Save user message
     user_msg = request.messages[-1].content
     db_service.save_message(session_id, role="user", content=user_msg)
+
+    # Update title if this is a new session (session_id was None initially)
+    if not request.session_id:
+        title = generate_title_from_message(user_msg)
+        db_service.update_session_title(session_id, title)
 
     # Convert chat history to LangChain messages
     lc_messages = []
