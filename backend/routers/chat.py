@@ -5,11 +5,10 @@ from services.agent import app
 from services.llm_service import generate_chat_title
 from dependencies import get_current_user
 from services import db_service
-from langchain_core.messages import HumanMessage, AIMessage, AIMessageChunk, ToolMessage
+from langchain_core.messages import HumanMessage, AIMessage, AIMessageChunk
 import json
 import asyncio
 import logging
-import re
 
 router = APIRouter(prefix="/api/chat", tags=["chat"])
 logger = logging.getLogger("uvicorn")
@@ -84,7 +83,6 @@ async def chat_endpoint(request: ChatRequest, user=Depends(get_current_user)):
 
         config = {"configurable": {"thread_id": session_id}}
         try:
-            # Reset per-turn state, including pending_draft and status
             initial_state = {
                 "messages": lc_messages,
                 "session_id": session_id,

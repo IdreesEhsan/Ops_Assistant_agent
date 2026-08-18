@@ -1,9 +1,5 @@
-"""
-Tools available to the OpsAssistant agent.
-"""
-
 from langchain.tools import tool
-from services.db_service import search_clients, search_tasks, get_latest_draft, update_draft
+from services.db_service import search_clients, search_tasks
 from services.embedding_service import get_embedding
 from services import db_service
 import json

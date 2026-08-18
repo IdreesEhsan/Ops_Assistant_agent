@@ -139,3 +139,9 @@ export async function approveEmail(emailId, approve) {
   if (!res.ok) throw new Error('Approval failed');
   return res.json();
 }
+
+export async function getGmailAuthUrl() {
+  const res = await authFetch(`${API_BASE_URL}/auth/gmail/authorize`, { headers: getHeaders() });
+  if (!res.ok) throw new Error('Failed to get Gmail auth URL');
+  return res.json();
+}

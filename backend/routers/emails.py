@@ -15,9 +15,10 @@ def pending_emails(user = Depends(get_current_user)):
 def approve_email(request: EmailApproval, user = Depends(get_current_user)):
     """
     Approve or reject an email draft.
-    - If approved, mark as sent (simulated).
+    - If approved, simulate sending and mark as sent.
     - If rejected, mark as rejected.
     """
+    # Get the email log
     log = supabase.table("email_logs").select("*").eq("id", request.email_log_id).single().execute()
     if not log.data:
         raise HTTPException(status_code=404, detail="Email not found")
@@ -25,9 +26,9 @@ def approve_email(request: EmailApproval, user = Depends(get_current_user)):
         raise HTTPException(status_code=403, detail="Unauthorized")
 
     draft = log.data["draft_json"]
+
     if request.approve:
-        # Simulate sending (returns True)
-        success = send_email(draft["to"], draft["subject"], draft["body"])
+        success = send_email(to=draft["to"], subject=draft["subject"], body=draft["body"])
         if success:
             update_email_status(request.email_log_id, "sent")
             return {"status": "sent"}

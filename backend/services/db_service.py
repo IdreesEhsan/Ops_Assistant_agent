@@ -89,7 +89,6 @@ def get_pending_emails(user_id: str):
 def update_email_status(email_log_id: str, status: str):
     supabase.table("email_logs").update({"status": status}).eq("id", email_log_id).execute()
 
-# NEW
 def get_latest_draft(session_id: str, user_id: str):
     res = supabase.table("email_logs") \
         .select("*") \

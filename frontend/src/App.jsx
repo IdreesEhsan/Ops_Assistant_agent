@@ -34,6 +34,7 @@ function App() {
       />
       <div style={{ flex: 1, position: 'relative', paddingTop: '16px' }}>
         <ChatView />
+
         {showDocuments && (
           <div style={{
             position: 'absolute', top: '16px', right: '16px', width: '400px',
@@ -49,6 +50,7 @@ function App() {
             <DocumentPanel />
           </div>
         )}
+
         {showApprovals && (
           <div style={{
             position: 'absolute', top: '16px', right: '16px', width: '400px',

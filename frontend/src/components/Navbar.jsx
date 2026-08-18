@@ -20,7 +20,12 @@ export default function Navbar({ setShowDocuments, setShowApprovals, onLogout })
             <FileText size={16} /> Approval Queue
           </button>
         </nav>
-        <button onClick={onLogout} className="ops-tab" style={{ border: 'none', background: 'transparent', cursor: 'pointer', color: '#f87171' }} title="Logout">
+        <button
+          onClick={onLogout}
+          className="ops-tab"
+          style={{ border: 'none', background: 'transparent', cursor: 'pointer', color: '#f87171' }}
+          title="Logout"
+        >
           <LogOut size={16} /> Logout
         </button>
       </div>

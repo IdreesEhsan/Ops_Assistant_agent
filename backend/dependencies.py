@@ -6,10 +6,6 @@ from config import settings
 security = HTTPBearer()
 
 async def get_current_user(credentials: HTTPAuthorizationCredentials = Depends(security)):
-    """
-    Validate JWT token and return the authenticated user.
-    This is used as a dependency in protected endpoints.
-    """
     token = credentials.credentials
     supabase = create_client(settings.SUPABASE_URL, settings.SUPABASE_KEY)
     user = supabase.auth.get_user(token)
