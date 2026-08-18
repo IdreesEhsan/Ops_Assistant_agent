@@ -1,5 +1,10 @@
 from langchain.tools import tool
-from services.db_service import search_clients, search_tasks
+from services.db_service import (
+    search_clients,
+    search_tasks,
+    add_client as db_add_client,
+    add_task as db_add_task
+)
 from services.embedding_service import get_embedding
 from services import db_service
 import json
@@ -7,6 +12,7 @@ import logging
 
 logger = logging.getLogger("uvicorn")
 
+# ---- RAG Tool ----
 @tool
 def rag_search(query: str) -> str:
     """
@@ -26,6 +32,7 @@ def rag_search(query: str) -> str:
         print(f"   chunk {r['chunk_index']}: {r['content'][:80]}...")
     return "\n".join(chunks)
 
+# ---- Client Tools ----
 @tool
 def lookup_client(query: str) -> str:
     """
@@ -40,18 +47,54 @@ def lookup_client(query: str) -> str:
     return json.dumps(results, indent=2)
 
 @tool
-def lookup_task(query: str) -> str:
+def add_client(name: str, email: str, company: str = "", status: str = "active") -> str:
     """
-    Look up tasks by title or status.
-    Returns task records in JSON format.
+    Add a new client to the database. Use this when the user wants to create a client record.
+    """
+    print(f"➕ add_client called: {name}, {email}")
+    result = db_add_client(name, email, company, status)
+    if result:
+        return f"Client added: {result['name']} ({result['email']})"
+    return "Failed to add client."
+
+# ---- Task Tools ----
+@tool
+def lookup_task(query: str = "") -> str:
+    """
+    Look up tasks by title, or use query 'all' to list all tasks.
+    Returns a readable summary including client name.
     """
     print(f"🔍 lookup_task called with query: {query}")
     results = search_tasks(query)
     if not results:
-        return "No task found."
-    print(f"   Found {len(results)} task(s)")
-    return json.dumps(results, indent=2)
+        return "No tasks found."
 
+    lines = []
+    for task in results:
+        client_info = task.get("clients") or {}
+        client_name = client_info.get("name", "Unknown")
+        client_email = client_info.get("email", "")
+        due = task.get("due_date") or "None"
+        lines.append(
+            f"Title: {task.get('title', '')}\n"
+            f"Client: {client_name} ({client_email})\n"
+            f"Status: {task.get('status', '')}\n"
+            f"Due Date: {due}\n"
+        )
+    return "\n".join(lines)
+
+@tool
+def add_task(title: str, client_email: str, status: str = "pending", due_date: str = None) -> str:
+    """
+    Add a new task for a client (looked up by email). Use this when the user wants to create a task.
+    """
+    print(f"➕ add_task called: {title} for {client_email}")
+    result = db_add_task(title, client_email, status, due_date)
+    if result:
+        return f"Task added: {result['title']} for client {client_email}"
+    return "Failed to add task. Client not found."
+
+# ---- Calculator ----
 @tool
 def calculator(expression: str) -> str:
     """
@@ -70,6 +113,7 @@ def calculator(expression: str) -> str:
         print(f"   Error: {e}")
         return f"Error: {str(e)}"
 
+# ---- Email Tools ----
 @tool
 def draft_email(to: str, subject: str, body: str) -> str:
     """

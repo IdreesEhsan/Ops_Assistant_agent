@@ -1,3 +1,9 @@
+"""
+LangGraph agent for OpsAssistant.
+Defines the agent state, nodes, and graph structure.
+Includes a human-in-the-loop approval step for email drafts.
+"""
+
 from langgraph.graph import StateGraph, END, START
 from langgraph.graph.message import add_messages
 from langgraph.checkpoint.memory import MemorySaver
@@ -7,14 +13,33 @@ import re
 import logging
 
 from services.llm_service import get_llm
-from services.tools import rag_search, lookup_client, lookup_task, calculator, draft_email, update_draft
+from services.tools import (
+    rag_search,
+    lookup_client,
+    lookup_task,
+    calculator,
+    draft_email,
+    update_draft,
+    add_client,          # <-- new tool
+    add_task             # <-- new tool
+)
 from services.email_service import create_draft
 from services.db_service import get_latest_draft, update_draft as db_update_draft
 from prompts.agent_prompt import SYSTEM_PROMPT
 
 logger = logging.getLogger("uvicorn")
 
-tools = [rag_search, lookup_client, lookup_task, calculator, draft_email, update_draft]
+# All tools available to the agent
+tools = [
+    rag_search,
+    lookup_client,
+    lookup_task,
+    calculator,
+    draft_email,
+    update_draft,
+    add_client,
+    add_task
+]
 tool_map = {t.name: t for t in tools}
 
 class AgentState(TypedDict):
@@ -24,6 +49,7 @@ class AgentState(TypedDict):
     pending_draft: dict | None
     status: str
     rag_sources: List[dict]
+
 
 def extract_sources_from_rag_output(content: str) -> List[dict]:
     sources = []
@@ -36,12 +62,14 @@ def extract_sources_from_rag_output(content: str) -> List[dict]:
             })
     return sources
 
+
 def agent_node(state: AgentState):
     llm = get_llm()
     llm_with_tools = llm.bind_tools(tools)
     messages = [HumanMessage(content=SYSTEM_PROMPT)] + state["messages"]
     response = llm_with_tools.invoke(messages)
     return {"messages": [response]}
+
 
 def tool_node(state: AgentState):
     last_message = state["messages"][-1]
@@ -115,6 +143,7 @@ def tool_node(state: AgentState):
         "rag_sources": new_rag_sources
     }
 
+
 def should_continue(state: AgentState) -> Literal["tools", "end"]:
     if state.get("status") == "await_approval":
         return "end"
@@ -122,6 +151,7 @@ def should_continue(state: AgentState) -> Literal["tools", "end"]:
     if hasattr(last_message, "tool_calls") and len(last_message.tool_calls) > 0:
         return "tools"
     return "end"
+
 
 graph = StateGraph(AgentState)
 graph.add_node("agent", agent_node)

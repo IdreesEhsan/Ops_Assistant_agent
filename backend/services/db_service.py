@@ -68,9 +68,56 @@ def search_clients(query: str, limit: int = 5):
     res = supabase.table("clients").select("*").ilike("name", f"%{query}%").limit(limit).execute()
     return res.data
 
-def search_tasks(query: str, limit: int = 5):
-    res = supabase.table("tasks").select("*").ilike("title", f"%{query}%").limit(limit).execute()
+def search_tasks(query: str = "", limit: int = 50):
+    """
+    Search tasks by title. If query is empty or 'all', return all tasks.
+    Includes client name/email via join.
+    """
+    if not query or query.lower() == "all":
+        res = supabase.table("tasks") \
+            .select("*, clients(name, email)") \
+            .limit(limit) \
+            .execute()
+    else:
+        res = supabase.table("tasks") \
+            .select("*, clients(name, email)") \
+            .ilike("title", f"%{query}%") \
+            .limit(limit) \
+            .execute()
     return res.data
+
+# ---------- Insert clients / tasks (for building data from chat) ----------
+def add_client(name: str, email: str, company: str = "", status: str = "active"):
+    """Insert a new client and return the created record."""
+    res = supabase.table("clients").insert({
+        "name": name,
+        "email": email,
+        "company": company,
+        "status": status
+    }).execute()
+    return res.data[0] if res.data else None
+
+def add_task(title: str, client_email: str, status: str = "pending", due_date: str = None):
+    """
+    Insert a new task linked to a client (by email).
+    Returns the created task if successful, else None.
+    """
+    # Find client by email
+    client_res = supabase.table("clients").select("id").eq("email", client_email).single().execute()
+    if not client_res.data:
+        return None
+    client_id = client_res.data["id"]
+
+    task_data = {
+        "title": title,
+        "client_id": client_id,
+        "status": status,
+    }
+    if due_date:
+        task_data["due_date"] = due_date
+
+    res = supabase.table("tasks").insert(task_data).execute()
+    return res.data[0] if res.data else None
 
 # ---------- Email logs ----------
 def create_email_log(session_id: str, user_id: str, draft_json: dict):
