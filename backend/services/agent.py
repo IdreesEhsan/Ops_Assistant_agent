@@ -56,6 +56,9 @@ def tool_node(state: AgentState):
         tool_name = tool_call["name"]
         tool_args = tool_call["args"]
 
+        # ✅ Log tool call to backend console
+        print(f"🔧 Tool called: {tool_name} with args: {tool_args}")
+
         if tool_name == "draft_email":
             draft = {
                 "to": tool_args.get("to"),
