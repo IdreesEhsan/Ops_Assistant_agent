@@ -11,3 +11,4 @@ pypdf
 python-docx
 pydantic-settings
 langchain-text-splitters
+resend
