@@ -13,9 +13,6 @@ def create_chat_session(user_id: str, system_prompt: str, title: str = "New Chat
     return res.data[0] if res.data else None
 
 def save_message(session_id: str, role: str, content: str, sources: list = []):
-    """
-    Save a message. If sources are provided (for assistant messages), store them as JSON.
-    """
     supabase.table("messages").insert({
         "session_id": session_id,
         "role": role,
@@ -24,17 +21,14 @@ def save_message(session_id: str, role: str, content: str, sources: list = []):
     }).execute()
 
 def get_session_messages(session_id: str):
-    """Get all messages in a session ordered by creation time."""
     res = supabase.table("messages").select("*").eq("session_id", session_id).order("created_at").execute()
     return res.data
 
 def get_all_sessions(user_id: str):
-    """Get all sessions for a user, newest first."""
     res = supabase.table("chat_sessions").select("*").eq("user_id", user_id).order("created_at", desc=True).execute()
     return res.data
 
 def update_session_title(session_id: str, new_title: str):
-    """Update the title of a session (used for auto-generated titles)."""
     supabase.table("chat_sessions").update({"title": new_title}).eq("id", session_id).execute()
 
 # ---------- Documents / Chunks ----------
@@ -94,3 +88,18 @@ def get_pending_emails(user_id: str):
 
 def update_email_status(email_log_id: str, status: str):
     supabase.table("email_logs").update({"status": status}).eq("id", email_log_id).execute()
+
+# NEW
+def get_latest_draft(session_id: str, user_id: str):
+    res = supabase.table("email_logs") \
+        .select("*") \
+        .eq("session_id", session_id) \
+        .eq("user_id", user_id) \
+        .eq("status", "draft") \
+        .order("created_at", desc=True) \
+        .limit(1) \
+        .execute()
+    return res.data[0] if res.data else None
+
+def update_draft(email_log_id: str, draft_json: dict):
+    supabase.table("email_logs").update({"draft_json": draft_json}).eq("id", email_log_id).execute()

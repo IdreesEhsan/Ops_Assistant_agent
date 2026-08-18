@@ -51,7 +51,6 @@ def delete_session(session_id: str, user=Depends(get_current_user)):
         )
         if not existing.data:
             raise HTTPException(status_code=404, detail="Session not found")
-
         db_service.supabase.table("chat_sessions").delete().eq("id", session_id).execute()
         return {"status": "deleted"}
     except HTTPException:
@@ -85,15 +84,16 @@ async def chat_endpoint(request: ChatRequest, user=Depends(get_current_user)):
 
         config = {"configurable": {"thread_id": session_id}}
         try:
-            # Reset rag_sources for this turn
+            # Reset per-turn state, including pending_draft and status
             initial_state = {
                 "messages": lc_messages,
                 "session_id": session_id,
                 "user_id": user.id,
-                "rag_sources": []
+                "rag_sources": [],
+                "pending_draft": None,
+                "status": ""
             }
 
-            # Stream token by token
             async for message_chunk, metadata in app.astream(
                 initial_state,
                 config,
@@ -104,15 +104,12 @@ async def chat_endpoint(request: ChatRequest, user=Depends(get_current_user)):
                     full_response += token
                     yield f"data: {json.dumps({'content': token})}\n\n"
 
-            # After streaming, get final state for sources
             final_state = await app.aget_state(config)
             rag_sources = final_state.values.get("rag_sources", [])
 
-            # If the answer is a refusal, clear sources
             if "cannot find" in full_response.lower():
                 rag_sources = []
 
-            # Save assistant message with sources (or empty if refusal)
             if full_response:
                 db_service.save_message(session_id, role="assistant", content=full_response, sources=rag_sources)
 

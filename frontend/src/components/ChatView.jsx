@@ -193,22 +193,25 @@ export default function ChatView() {
         <div style={{ padding: '16px', borderBottom: '1px solid var(--panel-border)', fontSize: '14px' }}>
           Ops Assistant – RAG + Tools
         </div>
-        <div style={{ flex: 1, padding: '20px', overflowY: 'auto', display: 'flex', flexDirection: 'column', gap: '16px' }}>
+        <div style={{ flex: 1, padding: '20px', overflowY: 'auto', overflowX: 'hidden', display: 'flex', flexDirection: 'column', gap: '16px' }}>
           {messages.map((m, i) => (
             <div key={i} style={{ display: 'flex', gap: '12px', justifyContent: m.role === 'user' ? 'flex-end' : 'flex-start' }}>
               {m.role === 'assistant' && <Bot size={20} color="#00f2fe" />}
               <div style={{
                 maxWidth: '70%', padding: '12px 16px', borderRadius: '16px',
                 background: m.role === 'user' ? 'rgba(0,242,254,0.2)' : 'rgba(255,255,255,0.05)',
-                border: '1px solid var(--panel-border)', lineHeight: '1.5'
+                border: '1px solid var(--panel-border)', lineHeight: '1.5',
+                overflowWrap: 'break-word',  // <-- fix long content
+                wordBreak: 'break-word',     // <-- fix long words
+                overflowX: 'hidden',         // <-- prevent horizontal scroll
               }}>
                 {m.role === 'user' ? (
-                  <div>{m.content}</div>
+                  <div style={{ whiteSpace: 'pre-wrap' }}>{m.content}</div>
                 ) : (
-                  <div className="markdown-body">
+                  <div className="markdown-body" style={{ overflowWrap: 'break-word', wordBreak: 'break-word' }}>
                     {m.content ? <ReactMarkdown remarkPlugins={[remarkGfm]}>{m.content}</ReactMarkdown> : (isGenerating && i === messages.length-1) ? <em>Thinking...</em> : ''}
                     {m.role === 'assistant' && m.sources && m.sources.length > 0 && (
-                      <div style={{ marginTop: '8px', fontSize: '12px', color: '#8892b0', borderTop: '1px solid rgba(255,255,255,0.1)', paddingTop: '4px' }}>
+                      <div style={{ marginTop: '8px', fontSize: '12px', color: '#8892b0', borderTop: '1px solid rgba(255,255,255,0.1)', paddingTop: '4px', overflowWrap: 'break-word', wordBreak: 'break-word' }}>
                         <strong>Sources:</strong>{" "}
                         {m.sources.map((s, idx) => (
                           <span key={idx}>

@@ -1,17 +1,15 @@
 """
 Tools available to the OpsAssistant agent.
-Each tool is decorated with @tool so LangChain can expose its description to the LLM.
 """
 
 from langchain.tools import tool
-from services.db_service import search_clients, search_tasks
+from services.db_service import search_clients, search_tasks, get_latest_draft, update_draft
 from services.embedding_service import get_embedding
 from services import db_service
 import json
 import logging
 
 logger = logging.getLogger("uvicorn")
-
 
 @tool
 def rag_search(query: str) -> str:
@@ -32,7 +30,6 @@ def rag_search(query: str) -> str:
         print(f"   chunk {r['chunk_index']}: {r['content'][:80]}...")
     return "\n".join(chunks)
 
-
 @tool
 def lookup_client(query: str) -> str:
     """
@@ -46,7 +43,6 @@ def lookup_client(query: str) -> str:
     print(f"   Found {len(results)} client(s)")
     return json.dumps(results, indent=2)
 
-
 @tool
 def lookup_task(query: str) -> str:
     """
@@ -59,7 +55,6 @@ def lookup_task(query: str) -> str:
         return "No task found."
     print(f"   Found {len(results)} task(s)")
     return json.dumps(results, indent=2)
-
 
 @tool
 def calculator(expression: str) -> str:
@@ -79,7 +74,6 @@ def calculator(expression: str) -> str:
         print(f"   Error: {e}")
         return f"Error: {str(e)}"
 
-
 @tool
 def draft_email(to: str, subject: str, body: str) -> str:
     """
@@ -88,3 +82,11 @@ def draft_email(to: str, subject: str, body: str) -> str:
     """
     print(f"✉️ draft_email called to: {to}, subject: {subject}")
     return f"Email draft prepared to {to}: {subject}"
+
+@tool
+def update_draft(to: str, subject: str, body: str) -> str:
+    """
+    Update the existing email draft for the current session. Use this when the user wants to modify the draft already created.
+    """
+    print(f"✏️ update_draft called to: {to}, subject: {subject}")
+    return f"Draft updated for {to}: {subject}"

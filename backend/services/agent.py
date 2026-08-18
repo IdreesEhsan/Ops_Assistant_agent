@@ -10,12 +10,17 @@ from langgraph.checkpoint.memory import MemorySaver
 from langchain_core.messages import AIMessage, HumanMessage, ToolMessage
 from typing import Annotated, TypedDict, List, Literal
 import re
+import logging
+
 from services.llm_service import get_llm
-from services.tools import rag_search, lookup_client, lookup_task, calculator, draft_email
+from services.tools import rag_search, lookup_client, lookup_task, calculator, draft_email, update_draft
 from services.email_service import create_draft
+from services.db_service import get_latest_draft, update_draft as db_update_draft   # ✅ correct import
 from prompts.agent_prompt import SYSTEM_PROMPT
 
-tools = [rag_search, lookup_client, lookup_task, calculator, draft_email]
+logger = logging.getLogger("uvicorn")
+
+tools = [rag_search, lookup_client, lookup_task, calculator, draft_email, update_draft]
 tool_map = {t.name: t for t in tools}
 
 class AgentState(TypedDict):
@@ -24,7 +29,7 @@ class AgentState(TypedDict):
     user_id: str
     pending_draft: dict | None
     status: str
-    rag_sources: List[dict]          # normal field, overwritten each turn
+    rag_sources: List[dict]
 
 
 def extract_sources_from_rag_output(content: str) -> List[dict]:
@@ -55,8 +60,6 @@ def tool_node(state: AgentState):
     for tool_call in last_message.tool_calls:
         tool_name = tool_call["name"]
         tool_args = tool_call["args"]
-
-        # ✅ Log tool call to backend console
         print(f"🔧 Tool called: {tool_name} with args: {tool_args}")
 
         if tool_name == "draft_email":
@@ -82,6 +85,33 @@ def tool_node(state: AgentState):
                 "status": "await_approval",
                 "rag_sources": new_rag_sources
             }
+
+        elif tool_name == "update_draft":
+            # Fetch latest pending draft for this session/user
+            latest = get_latest_draft(state["session_id"], state["user_id"])
+            if not latest:
+                outputs.append(ToolMessage(
+                    content="No existing draft found to update. Please create a new draft first.",
+                    tool_call_id=tool_call["id"]
+                ))
+                continue
+
+            existing_draft = latest["draft_json"] or {}
+            updated_draft = {
+                "to": tool_args.get("to", existing_draft.get("to")),
+                "subject": tool_args.get("subject", existing_draft.get("subject")),
+                "body": tool_args.get("body", existing_draft.get("body"))
+            }
+
+            # ✅ Correct call: db_service.update_draft takes (email_log_id, draft_json)
+            db_update_draft(latest["id"], updated_draft)
+
+            outputs.append(ToolMessage(
+                content=f"Draft updated for {updated_draft['to']} and is awaiting approval.",
+                tool_call_id=tool_call["id"]
+            ))
+            continue
+
         else:
             tool = tool_map[tool_name]
             result = tool.invoke(tool_args)
