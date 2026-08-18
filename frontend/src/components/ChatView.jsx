@@ -4,11 +4,27 @@ import { Send, Bot, User, Plus, MessageSquare, History, Trash2 } from 'lucide-re
 import ReactMarkdown from 'react-markdown';
 import remarkGfm from 'remark-gfm';
 
+const WELCOME_MESSAGE = `Hello! I am your Ops Assistant. I can help you with:
+
+- 📄 **Knowledge Base Search**: Ask questions about your documents.
+  *Example: "What is the refund policy?"*
+
+- 👥 **Clients & Tasks**: Look up or add structured data.
+  *Examples: "Look up client John", "Add a task for john@example.com"*
+
+- 🧮 **Calculator**: Perform arithmetic.
+  *Example: "Calculate 25 * 4 + 10"*
+
+- ✉️ **Email Drafting**: Draft emails (requires approval to send).
+  *Example: "Draft an email to john@example.com about the project delay"*
+
+Just type your request and I'll use the right tool.`;
+
 export default function ChatView() {
   const [sessions, setSessions] = useState([]);
   const [currentSessionId, setCurrentSessionId] = useState(null);
   const [messages, setMessages] = useState([
-    { role: 'assistant', content: 'Hello! I am your Ops Assistant. Ask me about clients, tasks, or documents.', sources: [] }
+    { role: 'assistant', content: WELCOME_MESSAGE, sources: [] }
   ]);
   const [input, setInput] = useState('');
   const [isGenerating, setIsGenerating] = useState(false);
@@ -45,7 +61,8 @@ export default function ChatView() {
 
       const savedSessionId = localStorage.getItem('ops_current_session_id');
       if (savedSessionId) {
-        const session = (await fetchSessions()).find(s => s.id === savedSessionId);
+        const sessionsData = await fetchSessions();
+        const session = sessionsData.find(s => s.id === savedSessionId);
         if (session) {
           await handleSelectSession(session);
         }
@@ -70,13 +87,13 @@ export default function ChatView() {
     try {
       const history = await fetchSessionMessages(session.id);
       const formatted = history.map(m => ({ role: m.role, content: m.content, sources: m.sources || [] }));
-      setMessages(formatted.length ? formatted : [{ role: 'assistant', content: 'Conversation loaded.', sources: [] }]);
+      setMessages(formatted.length ? formatted : [{ role: 'assistant', content: WELCOME_MESSAGE, sources: [] }]);
     } catch (err) { console.error(err); }
   };
 
   const handleNewChat = () => {
     setCurrentSessionId(null);
-    setMessages([{ role: 'assistant', content: 'Hello! I am your Ops Assistant. Ask me about clients, tasks, or documents.', sources: [] }]);
+    setMessages([{ role: 'assistant', content: WELCOME_MESSAGE, sources: [] }]);
   };
 
   const handleDeleteSession = async (sessionId) => {
@@ -201,9 +218,7 @@ export default function ChatView() {
                 maxWidth: '70%', padding: '12px 16px', borderRadius: '16px',
                 background: m.role === 'user' ? 'rgba(0,242,254,0.2)' : 'rgba(255,255,255,0.05)',
                 border: '1px solid var(--panel-border)', lineHeight: '1.5',
-                overflowWrap: 'break-word',  // <-- fix long content
-                wordBreak: 'break-word',     // <-- fix long words
-                overflowX: 'hidden',         // <-- prevent horizontal scroll
+                overflowWrap: 'break-word', wordBreak: 'break-word', overflowX: 'hidden',
               }}>
                 {m.role === 'user' ? (
                   <div style={{ whiteSpace: 'pre-wrap' }}>{m.content}</div>
