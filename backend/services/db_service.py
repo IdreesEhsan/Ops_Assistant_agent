@@ -86,7 +86,6 @@ def search_tasks(query: str = "", limit: int = 50):
             .execute()
     return res.data
 
-# ---------- Insert clients / tasks (for building data from chat) ----------
 def add_client(name: str, email: str, company: str = "", status: str = "active"):
     """Insert a new client and return the created record."""
     res = supabase.table("clients").insert({

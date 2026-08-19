@@ -10,10 +10,7 @@ function App() {
   const [showDocuments, setShowDocuments] = useState(false);
   const [showApprovals, setShowApprovals] = useState(false);
 
-  const handleLogin = () => {
-    setIsLoggedIn(true);
-  };
-
+  const handleLogin = () => setIsLoggedIn(true);
   const handleLogout = () => {
     localStorage.removeItem('access_token');
     setIsLoggedIn(false);
@@ -34,7 +31,6 @@ function App() {
       />
       <div style={{ flex: 1, position: 'relative', paddingTop: '16px' }}>
         <ChatView />
-
         {showDocuments && (
           <div style={{
             position: 'absolute', top: '16px', right: '16px', width: '400px',
@@ -50,7 +46,6 @@ function App() {
             <DocumentPanel />
           </div>
         )}
-
         {showApprovals && (
           <div style={{
             position: 'absolute', top: '16px', right: '16px', width: '400px',

@@ -145,3 +145,13 @@ export async function getGmailAuthUrl() {
   if (!res.ok) throw new Error('Failed to get Gmail auth URL');
   return res.json();
 }
+
+export async function connectEmail(data) {
+  const res = await authFetch(`${API_BASE_URL}/emails/connect`, {
+    method: 'POST',
+    headers: getHeaders(),
+    body: JSON.stringify(data)
+  });
+  if (!res.ok) throw new Error('Failed to connect email');
+  return res.json();
+}

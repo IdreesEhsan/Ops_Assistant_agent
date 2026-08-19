@@ -8,17 +8,10 @@ router = APIRouter(prefix="/api/emails", tags=["emails"])
 
 @router.get("/pending")
 def pending_emails(user = Depends(get_current_user)):
-    """Get all email drafts awaiting approval for the current user."""
     return get_pending_emails(user.id)
 
 @router.post("/approve")
 def approve_email(request: EmailApproval, user = Depends(get_current_user)):
-    """
-    Approve or reject an email draft.
-    - If approved, simulate sending and mark as sent.
-    - If rejected, mark as rejected.
-    """
-    # Get the email log
     log = supabase.table("email_logs").select("*").eq("id", request.email_log_id).single().execute()
     if not log.data:
         raise HTTPException(status_code=404, detail="Email not found")
@@ -28,7 +21,12 @@ def approve_email(request: EmailApproval, user = Depends(get_current_user)):
     draft = log.data["draft_json"]
 
     if request.approve:
-        success = send_email(to=draft["to"], subject=draft["subject"], body=draft["body"])
+        success = send_email(
+            to=draft["to"],
+            subject=draft["subject"],
+            body=draft["body"],
+            reply_to_email=user.email
+        )
         if success:
             update_email_status(request.email_log_id, "sent")
             return {"status": "sent"}
