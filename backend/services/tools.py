@@ -34,17 +34,25 @@ def rag_search(query: str) -> str:
 
 # ---- Client Tools ----
 @tool
-def lookup_client(query: str) -> str:
+def lookup_client(query: str = "") -> str:
     """
-    Look up client details by name or email.
-    Returns client records in JSON format.
+    Look up clients by name or email. Use query 'all' to list all clients.
+    Returns a readable summary.
     """
     print(f"🔍 lookup_client called with query: {query}")
     results = search_clients(query)
     if not results:
         return "No client found."
-    print(f"   Found {len(results)} client(s)")
-    return json.dumps(results, indent=2)
+
+    lines = []
+    for client in results:
+        lines.append(
+            f"Name: {client.get('name', '')}\n"
+            f"Email: {client.get('email', '')}\n"
+            f"Company: {client.get('company', '') or 'N/A'}\n"
+            f"Status: {client.get('status', '')}\n"
+        )
+    return "\n".join(lines)
 
 @tool
 def add_client(name: str, email: str, company: str = "", status: str = "active") -> str:
@@ -61,7 +69,7 @@ def add_client(name: str, email: str, company: str = "", status: str = "active")
 @tool
 def lookup_task(query: str = "") -> str:
     """
-    Look up tasks by title, or use query 'all' to list all tasks.
+    Look up tasks by title, client name, or use query 'all' to list all tasks.
     Returns a readable summary including client name.
     """
     print(f"🔍 lookup_task called with query: {query}")

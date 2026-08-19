@@ -64,13 +64,24 @@ def similarity_search(query_embedding: list[float], top_k: int = 7,
     return res.data
 
 # ---------- Structured data (clients, tasks) ----------
-def search_clients(query: str, limit: int = 5):
-    res = supabase.table("clients").select("*").ilike("name", f"%{query}%").limit(limit).execute()
+def search_clients(query: str = "", limit: int = 50):
+    """
+    Search clients by name or email. If query is empty or 'all', return all clients.
+    """
+    if not query or query.lower() == "all":
+        res = supabase.table("clients").select("*").limit(limit).execute()
+    else:
+        res = supabase.table("clients") \
+            .select("*") \
+            .ilike("name", f"%{query}%") \
+            .or_(f"email.ilike.%{query}%") \
+            .limit(limit) \
+            .execute()
     return res.data
 
 def search_tasks(query: str = "", limit: int = 50):
     """
-    Search tasks by title. If query is empty or 'all', return all tasks.
+    Search tasks by title or client name. If query is empty or 'all', return all tasks.
     Includes client name/email via join.
     """
     if not query or query.lower() == "all":
@@ -79,11 +90,27 @@ def search_tasks(query: str = "", limit: int = 50):
             .limit(limit) \
             .execute()
     else:
-        res = supabase.table("tasks") \
-            .select("*, clients(name, email)") \
-            .ilike("title", f"%{query}%") \
-            .limit(limit) \
+        # First, try to find matching clients by name
+        client_res = supabase.table("clients") \
+            .select("id") \
+            .ilike("name", f"%{query}%") \
             .execute()
+        client_ids = [c["id"] for c in client_res.data]
+
+        if client_ids:
+            # Search tasks where client_id in those ids, or title matches
+            res = supabase.table("tasks") \
+                .select("*, clients(name, email)") \
+                .or_(f"client_id.in.({','.join(client_ids)}),title.ilike.%{query}%") \
+                .limit(limit) \
+                .execute()
+        else:
+            # No client match, just search title
+            res = supabase.table("tasks") \
+                .select("*, clients(name, email)") \
+                .ilike("title", f"%{query}%") \
+                .limit(limit) \
+                .execute()
     return res.data
 
 def add_client(name: str, email: str, company: str = "", status: str = "active"):
