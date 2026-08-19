@@ -1,3 +1,8 @@
+"""
+Tools available to the OpsAssistant agent.
+Each tool is decorated with @tool so LangChain can expose its description to the LLM.
+"""
+
 from langchain.tools import tool
 from services.db_service import (
     search_clients,
@@ -7,12 +12,90 @@ from services.db_service import (
 )
 from services.embedding_service import get_embedding
 from services import db_service
+import ast
+import math
 import json
 import logging
 
 logger = logging.getLogger("uvicorn")
 
-# ---- RAG Tool ----
+# ---------- Helper: Safe scientific calculator ----------
+ALLOWED_FUNCTIONS = {
+    'sin': math.sin,
+    'cos': math.cos,
+    'tan': math.tan,
+    'asin': math.asin,
+    'acos': math.acos,
+    'atan': math.atan,
+    'atan2': math.atan2,
+    'sqrt': math.sqrt,
+    'log': math.log,
+    'log10': math.log10,
+    'exp': math.exp,
+    'sinh': math.sinh,
+    'cosh': math.cosh,
+    'tanh': math.tanh,
+    'degrees': math.degrees,
+    'radians': math.radians,
+    'fabs': math.fabs,
+    'floor': math.floor,
+    'ceil': math.ceil,
+    'factorial': math.factorial,
+    'gcd': math.gcd,
+    'pow': math.pow,
+}
+
+ALLOWED_CONSTANTS = {
+    'pi': math.pi,
+    'e': math.e,
+    'tau': math.tau,
+}
+
+def _is_safe_node(node):
+    """Validate AST node to allow only arithmetic and math functions."""
+    if isinstance(node, ast.Expression):
+        return _is_safe_node(node.body)
+    elif isinstance(node, ast.BinOp):
+        return _is_safe_node(node.left) and _is_safe_node(node.right)
+    elif isinstance(node, ast.UnaryOp):
+        return _is_safe_node(node.operand)
+    elif isinstance(node, ast.Constant):
+        # Only allow int, float, bool
+        return isinstance(node.value, (int, float))
+    elif isinstance(node, ast.Name):
+        return node.id in ALLOWED_CONSTANTS
+    elif isinstance(node, ast.Call):
+        return (
+            isinstance(node.func, ast.Name)
+            and node.func.id in ALLOWED_FUNCTIONS
+            and all(_is_safe_node(arg) for arg in node.args)
+        )
+    else:
+        return False
+
+def safe_eval(expression: str):
+    """
+    Safely evaluate a mathematical expression using AST validation.
+    Supports arithmetic, trigonometric, logarithmic, and other scientific functions.
+    Returns the result as a string, or an error message.
+    """
+    try:
+        parsed = ast.parse(expression, mode='eval')
+        if not _is_safe_node(parsed):
+            return "Invalid expression. Only arithmetic, trigonometric, logarithmic, and scientific functions are allowed."
+        # Evaluate with restricted globals
+        globals_dict = {"__builtins__": None}
+        globals_dict.update(ALLOWED_FUNCTIONS)
+        globals_dict.update(ALLOWED_CONSTANTS)
+        result = eval(compile(parsed, "<string>", "eval"), globals_dict)
+        return str(result)
+    except SyntaxError:
+        return "Invalid syntax."
+    except Exception as e:
+        return f"Error: {str(e)}"
+
+# ---------- Tools ----------
+
 @tool
 def rag_search(query: str) -> str:
     """
@@ -32,7 +115,6 @@ def rag_search(query: str) -> str:
         print(f"   chunk {r['chunk_index']}: {r['content'][:80]}...")
     return "\n".join(chunks)
 
-# ---- Client Tools ----
 @tool
 def lookup_client(query: str = "") -> str:
     """
@@ -65,7 +147,6 @@ def add_client(name: str, email: str, company: str = "", status: str = "active")
         return f"Client added: {result['name']} ({result['email']})"
     return "Failed to add client."
 
-# ---- Task Tools ----
 @tool
 def lookup_task(query: str = "") -> str:
     """
@@ -102,26 +183,20 @@ def add_task(title: str, client_email: str, status: str = "pending", due_date: s
         return f"Task added: {result['title']} for client {client_email}"
     return "Failed to add task. Client not found."
 
-# ---- Calculator ----
 @tool
 def calculator(expression: str) -> str:
     """
-    Safely evaluate a simple arithmetic expression.
-    Only numbers and + - * / ( ) are allowed.
+    Evaluate a mathematical expression. Supports basic arithmetic (+, -, *, /, **, %),
+    trigonometric functions (sin, cos, tan, asin, acos, atan),
+    logarithmic functions (log, log10), exponential (exp), square root (sqrt),
+    constants (pi, e), and other scientific functions.
+    Returns the numerical result as a string.
     """
     print(f"🧮 calculator called with expression: {expression}")
-    allowed_chars = "0123456789+-*/(). "
-    if any(c not in allowed_chars for c in expression):
-        return "Invalid expression. Only numbers and + - * / ( ) are allowed."
-    try:
-        result = eval(expression)
-        print(f"   Result: {result}")
-        return str(result)
-    except Exception as e:
-        print(f"   Error: {e}")
-        return f"Error: {str(e)}"
+    result = safe_eval(expression)
+    print(f"   Result: {result}")
+    return result
 
-# ---- Email Tools ----
 @tool
 def draft_email(to: str, subject: str, body: str) -> str:
     """
