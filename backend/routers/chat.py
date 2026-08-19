@@ -13,6 +13,21 @@ import logging
 router = APIRouter(prefix="/api/chat", tags=["chat"])
 logger = logging.getLogger("uvicorn")
 
+SUSPICIOUS_PHRASES = [
+    "ignore previous instructions",
+    "ignore all instructions",
+    "reveal your system prompt",
+    "pretend you are",
+    "you are not ops assistant",
+    "system prompt:",
+    "developer mode",
+    "do not follow"
+]
+
+def is_injection_attempt(text: str) -> bool:
+    lower = text.lower()
+    return any(phrase in lower for phrase in SUSPICIOUS_PHRASES)
+
 async def generate_and_update_title(session_id: str, user_message: str):
     try:
         title = await generate_chat_title(user_message)
@@ -67,6 +82,16 @@ async def chat_endpoint(request: ChatRequest, user=Depends(get_current_user)):
     user_msg = request.messages[-1].content
     db_service.save_message(session_id, role="user", content=user_msg, sources=[])
 
+    if is_injection_attempt(user_msg):
+        refusal = "I can't comply with that request. Please ask a company-related question."
+        db_service.save_message(session_id, role="assistant", content=refusal, sources=[])
+
+        async def inject_stream():
+            yield f"data: {json.dumps({'session_id': session_id})}\n\n"
+            yield f"data: {json.dumps({'content': refusal})}\n\n"
+            yield "data: [DONE]\n\n"
+        return StreamingResponse(inject_stream(), media_type="text/event-stream")
+
     if not request.session_id:
         asyncio.create_task(generate_and_update_title(session_id, user_msg))
 
@@ -89,7 +114,8 @@ async def chat_endpoint(request: ChatRequest, user=Depends(get_current_user)):
                 "user_id": user.id,
                 "rag_sources": [],
                 "pending_draft": None,
-                "status": ""
+                "status": "",
+                "steps": 0
             }
 
             async for message_chunk, metadata in app.astream(
@@ -104,21 +130,26 @@ async def chat_endpoint(request: ChatRequest, user=Depends(get_current_user)):
 
             final_state = await app.aget_state(config)
             rag_sources = final_state.values.get("rag_sources", [])
+            steps_used = final_state.values.get("steps", 0)
 
             if "cannot find" in full_response.lower():
                 rag_sources = []
 
             if full_response:
                 db_service.save_message(session_id, role="assistant", content=full_response, sources=rag_sources)
+            else:
+                if steps_used >= 10:
+                    full_response = "I reached the maximum number of tool calls for this request. Please try a simpler or more direct question."
+                else:
+                    full_response = "I couldn't generate a response. Please try again."
+                db_service.save_message(session_id, role="assistant", content=full_response, sources=rag_sources)
+                yield f"data: {json.dumps({'content': full_response})}\n\n"
 
             yield f"data: {json.dumps({'sources': rag_sources})}\n\n"
 
         except Exception as e:
             logger.error(f"Agent streaming error: {e}")
-            yield f"data: {json.dumps({'error': str(e)})}\n\n"
-
-        if not full_response:
-            fallback = "I couldn't generate a response. Please try again."
+            fallback = "I couldn't generate a response due to a technical issue. Please try again."
             db_service.save_message(session_id, role="assistant", content=fallback, sources=[])
             yield f"data: {json.dumps({'content': fallback})}\n\n"
 

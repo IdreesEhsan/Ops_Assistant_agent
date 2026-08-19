@@ -1,8 +1,3 @@
-"""
-Tools available to the OpsAssistant agent.
-Each tool is decorated with @tool so LangChain can expose its description to the LLM.
-"""
-
 from langchain.tools import tool
 from services.db_service import (
     search_clients,
@@ -19,40 +14,23 @@ import logging
 
 logger = logging.getLogger("uvicorn")
 
-# ---------- Helper: Safe scientific calculator ----------
+# ---------- Safe scientific calculator ----------
 ALLOWED_FUNCTIONS = {
-    'sin': math.sin,
-    'cos': math.cos,
-    'tan': math.tan,
-    'asin': math.asin,
-    'acos': math.acos,
-    'atan': math.atan,
-    'atan2': math.atan2,
-    'sqrt': math.sqrt,
-    'log': math.log,
-    'log10': math.log10,
-    'exp': math.exp,
-    'sinh': math.sinh,
-    'cosh': math.cosh,
-    'tanh': math.tanh,
-    'degrees': math.degrees,
-    'radians': math.radians,
-    'fabs': math.fabs,
-    'floor': math.floor,
-    'ceil': math.ceil,
-    'factorial': math.factorial,
-    'gcd': math.gcd,
+    'sin': math.sin, 'cos': math.cos, 'tan': math.tan,
+    'asin': math.asin, 'acos': math.acos, 'atan': math.atan,
+    'atan2': math.atan2, 'sqrt': math.sqrt, 'log': math.log,
+    'log10': math.log10, 'exp': math.exp, 'sinh': math.sinh,
+    'cosh': math.cosh, 'tanh': math.tanh, 'degrees': math.degrees,
+    'radians': math.radians, 'fabs': math.fabs, 'floor': math.floor,
+    'ceil': math.ceil, 'factorial': math.factorial, 'gcd': math.gcd,
     'pow': math.pow,
 }
 
 ALLOWED_CONSTANTS = {
-    'pi': math.pi,
-    'e': math.e,
-    'tau': math.tau,
+    'pi': math.pi, 'e': math.e, 'tau': math.tau,
 }
 
 def _is_safe_node(node):
-    """Validate AST node to allow only arithmetic and math functions."""
     if isinstance(node, ast.Expression):
         return _is_safe_node(node.body)
     elif isinstance(node, ast.BinOp):
@@ -60,7 +38,6 @@ def _is_safe_node(node):
     elif isinstance(node, ast.UnaryOp):
         return _is_safe_node(node.operand)
     elif isinstance(node, ast.Constant):
-        # Only allow int, float, bool
         return isinstance(node.value, (int, float))
     elif isinstance(node, ast.Name):
         return node.id in ALLOWED_CONSTANTS
@@ -74,16 +51,10 @@ def _is_safe_node(node):
         return False
 
 def safe_eval(expression: str):
-    """
-    Safely evaluate a mathematical expression using AST validation.
-    Supports arithmetic, trigonometric, logarithmic, and other scientific functions.
-    Returns the result as a string, or an error message.
-    """
     try:
         parsed = ast.parse(expression, mode='eval')
         if not _is_safe_node(parsed):
             return "Invalid expression. Only arithmetic, trigonometric, logarithmic, and scientific functions are allowed."
-        # Evaluate with restricted globals
         globals_dict = {"__builtins__": None}
         globals_dict.update(ALLOWED_FUNCTIONS)
         globals_dict.update(ALLOWED_CONSTANTS)
@@ -95,7 +66,6 @@ def safe_eval(expression: str):
         return f"Error: {str(e)}"
 
 # ---------- Tools ----------
-
 @tool
 def rag_search(query: str) -> str:
     """
@@ -112,7 +82,6 @@ def rag_search(query: str) -> str:
     for r in results:
         page = r["metadata"].get("page", "N/A")
         chunks.append(f"- {r['content'][:300]} (from {r['filename']}, page {page})")
-        print(f"   chunk {r['chunk_index']}: {r['content'][:80]}...")
     return "\n".join(chunks)
 
 @tool
@@ -125,7 +94,6 @@ def lookup_client(query: str = "") -> str:
     results = search_clients(query)
     if not results:
         return "No client found."
-
     lines = []
     for client in results:
         lines.append(
@@ -157,7 +125,6 @@ def lookup_task(query: str = "") -> str:
     results = search_tasks(query)
     if not results:
         return "No tasks found."
-
     lines = []
     for task in results:
         client_info = task.get("clients") or {}

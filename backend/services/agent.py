@@ -1,9 +1,3 @@
-"""
-LangGraph agent for OpsAssistant.
-Defines the agent state, nodes, and graph structure.
-Includes a human-in-the-loop approval step for email drafts.
-"""
-
 from langgraph.graph import StateGraph, END, START
 from langgraph.graph.message import add_messages
 from langgraph.checkpoint.memory import MemorySaver
@@ -20,8 +14,8 @@ from services.tools import (
     calculator,
     draft_email,
     update_draft,
-    add_client,          # <-- new tool
-    add_task             # <-- new tool
+    add_client,
+    add_task
 )
 from services.email_service import create_draft
 from services.db_service import get_latest_draft, update_draft as db_update_draft
@@ -29,7 +23,6 @@ from prompts.agent_prompt import SYSTEM_PROMPT
 
 logger = logging.getLogger("uvicorn")
 
-# All tools available to the agent
 tools = [
     rag_search,
     lookup_client,
@@ -49,7 +42,7 @@ class AgentState(TypedDict):
     pending_draft: dict | None
     status: str
     rag_sources: List[dict]
-
+    steps: int
 
 def extract_sources_from_rag_output(content: str) -> List[dict]:
     sources = []
@@ -62,14 +55,12 @@ def extract_sources_from_rag_output(content: str) -> List[dict]:
             })
     return sources
 
-
 def agent_node(state: AgentState):
     llm = get_llm()
     llm_with_tools = llm.bind_tools(tools)
     messages = [HumanMessage(content=SYSTEM_PROMPT)] + state["messages"]
     response = llm_with_tools.invoke(messages)
     return {"messages": [response]}
-
 
 def tool_node(state: AgentState):
     last_message = state["messages"][-1]
@@ -79,79 +70,76 @@ def tool_node(state: AgentState):
     for tool_call in last_message.tool_calls:
         tool_name = tool_call["name"]
         tool_args = tool_call["args"]
-        print(f"🔧 Tool called: {tool_name} with args: {tool_args}")
+        print(f"🔧 Tool called: {tool_name} with args: {tool_args}", flush=True)
 
-        if tool_name == "draft_email":
-            draft = {
-                "to": tool_args.get("to"),
-                "subject": tool_args.get("subject"),
-                "body": tool_args.get("body")
-            }
-            create_draft(
-                session_id=state["session_id"],
-                user_id=state["user_id"],
-                to=draft["to"],
-                subject=draft["subject"],
-                body=draft["body"]
-            )
-            outputs.append(ToolMessage(
-                content=f"Draft created and awaiting approval. Email to {draft['to']} is not sent yet.",
-                tool_call_id=tool_call["id"]
-            ))
-            return {
-                "messages": outputs,
-                "pending_draft": draft,
-                "status": "await_approval",
-                "rag_sources": new_rag_sources
-            }
-
-        elif tool_name == "update_draft":
-            latest = get_latest_draft(state["session_id"], state["user_id"])
-            if not latest:
+        try:
+            if tool_name == "draft_email":
+                draft = {
+                    "to": tool_args.get("to"),
+                    "subject": tool_args.get("subject"),
+                    "body": tool_args.get("body")
+                }
+                create_draft(
+                    session_id=state["session_id"],
+                    user_id=state["user_id"],
+                    to=draft["to"],
+                    subject=draft["subject"],
+                    body=draft["body"]
+                )
                 outputs.append(ToolMessage(
-                    content="No existing draft found to update. Please create a new draft first.",
+                    content=f"Draft created and awaiting approval. Email to {draft['to']} is not sent yet.",
                     tool_call_id=tool_call["id"]
                 ))
-                continue
 
-            existing_draft = latest["draft_json"] or {}
-            updated_draft = {
-                "to": tool_args.get("to", existing_draft.get("to")),
-                "subject": tool_args.get("subject", existing_draft.get("subject")),
-                "body": tool_args.get("body", existing_draft.get("body"))
-            }
-            db_update_draft(latest["id"], updated_draft)
+            elif tool_name == "update_draft":
+                latest = get_latest_draft(state["session_id"], state["user_id"])
+                if not latest:
+                    outputs.append(ToolMessage(
+                        content="No existing draft found to update. Please create a new draft first.",
+                        tool_call_id=tool_call["id"]
+                    ))
+                else:
+                    existing_draft = latest["draft_json"] or {}
+                    updated_draft = {
+                        "to": tool_args.get("to", existing_draft.get("to")),
+                        "subject": tool_args.get("subject", existing_draft.get("subject")),
+                        "body": tool_args.get("body", existing_draft.get("body"))
+                    }
+                    db_update_draft(latest["id"], updated_draft)
+                    outputs.append(ToolMessage(
+                        content=f"Draft updated for {updated_draft['to']} and is awaiting approval.",
+                        tool_call_id=tool_call["id"]
+                    ))
 
-            outputs.append(ToolMessage(
-                content=f"Draft updated for {updated_draft['to']} and is awaiting approval.",
-                tool_call_id=tool_call["id"]
-            ))
-            continue
+            else:
+                tool = tool_map[tool_name]
+                result = tool.invoke(tool_args)
+                outputs.append(ToolMessage(content=str(result), tool_call_id=tool_call["id"]))
+                if tool_name == "rag_search":
+                    sources = extract_sources_from_rag_output(str(result))
+                    new_rag_sources.extend(sources)
 
-        else:
-            tool = tool_map[tool_name]
-            result = tool.invoke(tool_args)
-            outputs.append(ToolMessage(content=str(result), tool_call_id=tool_call["id"]))
-
-            if tool_name == "rag_search":
-                sources = extract_sources_from_rag_output(str(result))
-                new_rag_sources.extend(sources)
+        except Exception as e:
+            error_msg = f"Tool {tool_name} failed: {str(e)}"
+            outputs.append(ToolMessage(content=error_msg, tool_call_id=tool_call["id"]))
+            print(f"🔴 {error_msg}", flush=True)
 
     return {
         "messages": outputs,
         "status": "continue",
-        "rag_sources": new_rag_sources
+        "rag_sources": new_rag_sources,
+        "steps": state.get("steps", 0) + 1
     }
-
 
 def should_continue(state: AgentState) -> Literal["tools", "end"]:
     if state.get("status") == "await_approval":
+        return "end"
+    if state.get("steps", 0) >= 10:
         return "end"
     last_message = state["messages"][-1]
     if hasattr(last_message, "tool_calls") and len(last_message.tool_calls) > 0:
         return "tools"
     return "end"
-
 
 graph = StateGraph(AgentState)
 graph.add_node("agent", agent_node)

@@ -90,7 +90,15 @@ def search_tasks(query: str = "", limit: int = 50):
             .limit(limit) \
             .execute()
     else:
-        # First, try to find matching clients by name
+        # Search tasks by title
+        title_res = supabase.table("tasks") \
+            .select("*, clients(name, email)") \
+            .ilike("title", f"%{query}%") \
+            .limit(limit) \
+            .execute()
+        tasks = title_res.data
+
+        # Search clients by name
         client_res = supabase.table("clients") \
             .select("id") \
             .ilike("name", f"%{query}%") \
@@ -98,23 +106,24 @@ def search_tasks(query: str = "", limit: int = 50):
         client_ids = [c["id"] for c in client_res.data]
 
         if client_ids:
-            # Search tasks where client_id in those ids, or title matches
-            res = supabase.table("tasks") \
+            client_tasks_res = supabase.table("tasks") \
                 .select("*, clients(name, email)") \
-                .or_(f"client_id.in.({','.join(client_ids)}),title.ilike.%{query}%") \
+                .in_("client_id", client_ids) \
                 .limit(limit) \
                 .execute()
-        else:
-            # No client match, just search title
-            res = supabase.table("tasks") \
-                .select("*, clients(name, email)") \
-                .ilike("title", f"%{query}%") \
-                .limit(limit) \
-                .execute()
+            tasks.extend(client_tasks_res.data)
+
+        # Deduplicate
+        seen = set()
+        deduped = []
+        for task in tasks:
+            if task["id"] not in seen:
+                seen.add(task["id"])
+                deduped.append(task)
+        return deduped
     return res.data
 
 def add_client(name: str, email: str, company: str = "", status: str = "active"):
-    """Insert a new client and return the created record."""
     res = supabase.table("clients").insert({
         "name": name,
         "email": email,
@@ -124,11 +133,6 @@ def add_client(name: str, email: str, company: str = "", status: str = "active")
     return res.data[0] if res.data else None
 
 def add_task(title: str, client_email: str, status: str = "pending", due_date: str = None):
-    """
-    Insert a new task linked to a client (by email).
-    Returns the created task if successful, else None.
-    """
-    # Find client by email
     client_res = supabase.table("clients").select("id").eq("email", client_email).single().execute()
     if not client_res.data:
         return None
