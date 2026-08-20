@@ -148,8 +148,15 @@ async def chat_endpoint(request: ChatRequest, user=Depends(get_current_user)):
             yield f"data: {json.dumps({'sources': rag_sources})}\n\n"
 
         except Exception as e:
+            error_str = str(e)
             logger.error(f"Agent streaming error: {e}")
-            fallback = "I couldn't generate a response due to a technical issue. Please try again."
+
+            # Detect rate limit / token limit errors
+            if "rate_limit_exceeded" in error_str or "429" in error_str:
+                fallback = "I'm currently experiencing high demand and have reached my usage limit for the moment. Please try again later, or split your request into smaller steps (e.g., add fewer clients at once)."
+            else:
+                fallback = "I couldn't generate a response due to a technical issue. Please try again."
+
             db_service.save_message(session_id, role="assistant", content=fallback, sources=[])
             yield f"data: {json.dumps({'content': fallback})}\n\n"
 
